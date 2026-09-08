@@ -3,12 +3,14 @@
 from fastapi import FastAPI
 
 from src import config, logging_utils
+from src.routers.configuracion import router as configuracion_router
 from src.routers.eventos import router as eventos_router
 from src.routers.health import router as health_router
 
 app = FastAPI(title='DTDCFDAB API', docs_url=None, redoc_url=None, openapi_url=None)
 app.include_router(health_router)
 app.include_router(eventos_router)
+app.include_router(configuracion_router)
 
 
 @app.on_event('startup')
