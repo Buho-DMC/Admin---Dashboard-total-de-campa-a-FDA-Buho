@@ -4,6 +4,8 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from src.models.jobs import JobOut
+
 
 class CampanaRetoolOut(BaseModel):
     """Una campaña FDA tal como la reporta el workflow de Retool (sin dar de alta todavía)."""
@@ -13,3 +15,38 @@ class CampanaRetoolOut(BaseModel):
     cliente: str
     cliente_clave: str | None
     inicio_campana: datetime | None
+
+
+class MilestoneIn(BaseModel):
+    """Un hito FDA capturado a mano en el formulario de alta."""
+
+    codigo_evento: str
+    fecha: datetime
+
+
+class CampanaOut(BaseModel):
+    """Una campaña ya dada de alta."""
+
+    id_campana: int
+    id_claw: int
+    cliente: str
+    nombre: str
+    inicio_campana: datetime
+    fecha_alta: datetime
+
+
+class CampanaAltaIn(BaseModel):
+    """Body para dar de alta una campaña nueva."""
+
+    id_claw: int
+    cliente: str
+    nombre: str
+    inicio_campana: datetime
+    milestones: list[MilestoneIn] = []
+
+
+class CampanaAltaOut(BaseModel):
+    """Resultado de dar de alta una campaña: la campaña y el job de ETL creado."""
+
+    campana: CampanaOut
+    job: JobOut
