@@ -81,3 +81,23 @@ def test_get_campana_detalle_404(monkeypatch):
         mock_get_db_engine.return_value.dispose = lambda: None
         response = client.get('/campanas/999', headers=HEADERS)
     assert response.status_code == 404
+
+
+def test_get_campanas_eventos(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.campanas.campanas.list_eventos_de_campana', return_value=[]):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.get('/campanas/1/eventos', headers=HEADERS)
+    assert response.status_code == 200
+
+
+def test_put_campanas_evento_desconocido_400(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.campanas.campanas.upsert_evento_de_campana', side_effect=ValueError('no existe')):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.put(
+            '/campanas/1/eventos/no_existe', headers=HEADERS, json={'fecha': '2026-02-01T00:00:00'}
+        )
+    assert response.status_code == 400

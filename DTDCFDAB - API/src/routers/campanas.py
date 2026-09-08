@@ -3,7 +3,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from src import clients
-from src.models.campanas import CampanaAltaIn, CampanaAltaOut, CampanaOut, CampanaRetoolOut
+from src.models.campanas import (
+    CampanaAltaIn,
+    CampanaAltaOut,
+    CampanaEventoOut,
+    CampanaEventoUpsertIn,
+    CampanaOut,
+    CampanaRetoolOut,
+)
 from src.security import require_api_key
 from src.services import campanas, jobs
 
@@ -98,3 +105,44 @@ def get_campana_detalle(id_campana: int) -> dict:
     if campana_encontrada is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Campana no encontrada')
     return campana_encontrada
+
+
+@router.get('/campanas/{id_campana}/eventos', response_model=list[CampanaEventoOut])
+def get_campana_eventos(id_campana: int) -> list[dict]:
+    """Lista el catálogo de hitos FDA con la fecha capturada (o pendiente) de una campaña.
+
+    Args:
+        id_campana: id de la campaña.
+
+    Returns:
+        Lista de `CampanaEventoOut`.
+    """
+    engine = clients.get_db_engine()
+    try:
+        return campanas.list_eventos_de_campana(engine, id_campana)
+    finally:
+        engine.dispose()
+
+
+@router.put('/campanas/{id_campana}/eventos/{codigo_evento}', response_model=CampanaEventoOut)
+def put_campana_evento(id_campana: int, codigo_evento: str, body: CampanaEventoUpsertIn) -> dict:
+    """Captura o corrige la fecha de un hito FDA para una campaña.
+
+    Args:
+        id_campana: id de la campaña.
+        codigo_evento: slug del evento en el catálogo.
+        body: la `fecha` a capturar.
+
+    Returns:
+        `CampanaEventoOut` con el hito actualizado.
+
+    Raises:
+        HTTPException: 400 si `codigo_evento` no existe en el catálogo.
+    """
+    engine = clients.get_db_engine()
+    try:
+        return campanas.upsert_evento_de_campana(engine, id_campana, codigo_evento, body.fecha)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
+    finally:
+        engine.dispose()

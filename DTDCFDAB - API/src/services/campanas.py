@@ -168,3 +168,84 @@ def dar_de_alta(
     job_de_alta = jobs_service.crear_job(engine, id_campana=id_campana, id_configuracion=configuracion_vigente['id_configuracion'], tipo='alta')
     campana_insertada = get_campana(engine, id_campana)
     return {'campana': campana_insertada, 'job': job_de_alta}
+
+
+def list_eventos_de_campana(engine: Engine, id_campana: int) -> list[dict]:
+    """Lista el catálogo completo de hitos FDA con la fecha capturada para una campaña (si existe).
+
+    Args:
+        engine: engine de SQLAlchemy.
+        id_campana: campaña a consultar.
+
+    Returns:
+        Lista de dicts con `id_evento`, `codigo`, `nombre`, `fecha` (`None` si no se
+        ha capturado) y `actualizado_en` — incluye los hitos aún no capturados, para
+        que el formulario muestre cuáles faltan.
+    """
+    with engine.connect() as connection:
+        result_rows = connection.execute(
+            text(
+                'SELECT ev.id_evento AS id_evento, ev.codigo, ev.nombre, ce.fecha, ce.actualizado_en '
+                'FROM dtdcfdab_evento ev '
+                'LEFT JOIN dtdcfdab_campana_evento ce '
+                '  ON ce.id_evento = ev.id_evento AND ce.id_campana = :id_campana '
+                'ORDER BY ev.orden'
+            ),
+            {'id_campana': id_campana},
+        )
+        return [dict(row._mapping) for row in result_rows]
+
+
+def upsert_evento_de_campana(engine: Engine, id_campana: int, codigo_evento: str, fecha: datetime) -> dict:
+    """Captura o corrige la fecha de un hito FDA para una campaña.
+
+    Args:
+        engine: engine de SQLAlchemy.
+        id_campana: campaña a la que pertenece el hito.
+        codigo_evento: slug del evento en el catálogo (ver `dtdcfdab_evento.codigo`).
+        fecha: fecha capturada para ese hito.
+
+    Returns:
+        Dict con `id_evento`, `codigo`, `nombre`, `fecha` y `actualizado_en` (el
+        timestamp real del upsert, no la `fecha` capturada).
+
+    Raises:
+        ValueError: si `codigo_evento` no existe en el catálogo.
+    """
+    catalogo_eventos = {evento['codigo']: evento for evento in eventos_service.list_eventos(engine)}
+    if codigo_evento not in catalogo_eventos:
+        raise ValueError(f'codigo_evento desconocido: {codigo_evento}')
+    evento_del_catalogo = catalogo_eventos[codigo_evento]
+    id_evento = evento_del_catalogo['id_evento']
+
+    with engine.begin() as connection:
+        fila_ya_existe = connection.execute(
+            text('SELECT 1 FROM dtdcfdab_campana_evento WHERE id_campana = :id_campana AND id_evento = :id_evento'),
+            {'id_campana': id_campana, 'id_evento': id_evento},
+        ).first()
+
+        ahora = datetime.now(timezone.utc)
+        if fila_ya_existe:
+            connection.execute(
+                text(
+                    'UPDATE dtdcfdab_campana_evento SET fecha = :fecha, actualizado_en = :ahora '
+                    'WHERE id_campana = :id_campana AND id_evento = :id_evento'
+                ),
+                {'fecha': fecha, 'ahora': ahora, 'id_campana': id_campana, 'id_evento': id_evento},
+            )
+        else:
+            connection.execute(
+                text(
+                    'INSERT INTO dtdcfdab_campana_evento (id_campana, id_evento, fecha, actualizado_en) '
+                    'VALUES (:id_campana, :id_evento, :fecha, :ahora)'
+                ),
+                {'id_campana': id_campana, 'id_evento': id_evento, 'fecha': fecha, 'ahora': ahora},
+            )
+
+    return {
+        'id_evento': id_evento,
+        'codigo': codigo_evento,
+        'nombre': evento_del_catalogo['nombre'],
+        'fecha': fecha,
+        'actualizado_en': ahora,
+    }

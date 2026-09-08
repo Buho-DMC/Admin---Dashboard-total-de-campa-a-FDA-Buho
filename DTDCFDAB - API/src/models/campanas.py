@@ -50,3 +50,19 @@ class CampanaAltaOut(BaseModel):
 
     campana: CampanaOut
     job: JobOut
+
+
+class CampanaEventoOut(BaseModel):
+    """La fecha capturada (o pendiente) de un hito FDA para una campaña."""
+
+    id_evento: int
+    codigo: str
+    nombre: str
+    fecha: datetime | None
+    actualizado_en: datetime | None
+
+
+class CampanaEventoUpsertIn(BaseModel):
+    """Body para capturar o corregir la fecha de un hito FDA."""
+
+    fecha: datetime

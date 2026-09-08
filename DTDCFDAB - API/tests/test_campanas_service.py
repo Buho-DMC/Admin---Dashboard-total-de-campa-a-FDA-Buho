@@ -5,7 +5,14 @@ import pytest
 from sqlalchemy import text
 
 from src import config
-from src.services.campanas import dar_de_alta, get_campana, list_campanas, listar_campanas_fda_retool
+from src.services.campanas import (
+    dar_de_alta,
+    get_campana,
+    list_campanas,
+    list_eventos_de_campana,
+    listar_campanas_fda_retool,
+    upsert_evento_de_campana,
+)
 
 PAYLOAD_RETOOL = {
     'ok': True,
@@ -154,3 +161,52 @@ def test_get_campana_encontrada(engine):
     campana_de_prueba = list_campanas(engine)[0]
 
     assert get_campana(engine, campana_de_prueba['id_campana'])['id_claw'] == 1
+
+
+def test_list_eventos_de_campana_incluye_no_capturados(engine):
+    _sembrar_catalogo_eventos(engine)
+    _sembrar_configuracion_vigente(engine)
+    dar_de_alta(engine, id_claw=1, cliente='FDA', nombre='X', inicio_campana=datetime(2026, 1, 1), milestones=[])
+
+    resultado = list_eventos_de_campana(engine, 1)
+
+    assert len(resultado) == 1
+    assert resultado[0]['codigo'] == 'entrega_promociones_ac'
+    assert resultado[0]['fecha'] is None
+
+
+def test_upsert_evento_de_campana_inserta_si_no_existe(engine):
+    _sembrar_catalogo_eventos(engine)
+    _sembrar_configuracion_vigente(engine)
+    dar_de_alta(engine, id_claw=1, cliente='FDA', nombre='X', inicio_campana=datetime(2026, 1, 1), milestones=[])
+
+    resultado = upsert_evento_de_campana(engine, 1, 'entrega_promociones_ac', datetime(2026, 2, 1))
+
+    assert resultado['fecha'] == datetime(2026, 2, 1)
+    assert resultado['codigo'] == 'entrega_promociones_ac'
+    assert resultado['nombre'] == 'X'  # nombre real del evento sembrado por _sembrar_catalogo_eventos
+    assert resultado['actualizado_en'] is not None
+
+
+def test_upsert_evento_de_campana_actualiza_si_ya_existe(engine):
+    _sembrar_catalogo_eventos(engine)
+    _sembrar_configuracion_vigente(engine)
+    dar_de_alta(
+        engine, id_claw=1, cliente='FDA', nombre='X', inicio_campana=datetime(2026, 1, 1),
+        milestones=[{'codigo_evento': 'entrega_promociones_ac', 'fecha': datetime(2026, 1, 15)}],
+    )
+
+    resultado = upsert_evento_de_campana(engine, 1, 'entrega_promociones_ac', datetime(2026, 2, 1))
+
+    assert resultado['fecha'] == datetime(2026, 2, 1)
+    with engine.connect() as connection:
+        numero_de_filas = connection.execute(text('SELECT COUNT(*) FROM dtdcfdab_campana_evento')).scalar_one()
+    assert numero_de_filas == 1
+
+
+def test_upsert_evento_de_campana_codigo_desconocido_lanza_valueerror(engine):
+    _sembrar_configuracion_vigente(engine)
+    dar_de_alta(engine, id_claw=1, cliente='FDA', nombre='X', inicio_campana=datetime(2026, 1, 1), milestones=[])
+
+    with pytest.raises(ValueError):
+        upsert_evento_de_campana(engine, 1, 'no_existe', datetime(2026, 2, 1))
