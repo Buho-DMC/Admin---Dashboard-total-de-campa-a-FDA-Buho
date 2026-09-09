@@ -1,10 +1,8 @@
 from datetime import datetime
 
-import httpx
 import pytest
-from sqlalchemy import text
+from sqlalchemy import create_engine, text
 
-from src import config
 from src.services.campanas import (
     dar_de_alta,
     get_campana,
@@ -14,63 +12,57 @@ from src.services.campanas import (
     upsert_evento_de_campana,
 )
 
-PAYLOAD_RETOOL = {
-    'ok': True,
-    'campanas': [
-        {'clave_cliente': 'FDA', 'cliente': 'Farmacias del ahorro', 'campana': 'FDA AGO26-2',
-         'id_claw': 229, 'id_nest': 332, 'inicio_campana': '2026-07-24T17:55:49.000Z'},
-        {'clave_cliente': 'YZA', 'cliente': 'Farmacias YZA', 'campana': 'YZA JUN26',
-         'id_claw': 50, 'id_nest': 51, 'inicio_campana': '2026-06-01T00:00:00.000Z'},
-        {'clave_cliente': 'FDA', 'cliente': 'Farmacias del ahorro', 'campana': 'FDA JUN26',
-         'id_claw': 199, 'id_nest': 300, 'inicio_campana': '2026-06-10T00:00:00.000Z'},
-    ],
-}
+
+@pytest.fixture
+def retool_engine():
+    """Engine de SQLite in-memory con `kam_campanas` sembrada a mano.
+
+    Yields:
+        Un `Engine` de SQLAlchemy con 3 filas: dos campañas FDA y una YZA, para
+        probar el filtro por `cliente` y el orden por `inicio_campana`.
+    """
+    sqlite_engine = create_engine('sqlite:///:memory:')
+    with sqlite_engine.begin() as connection:
+        connection.execute(
+            text(
+                'CREATE TABLE kam_campanas ('
+                'id_campana INTEGER PRIMARY KEY, id_claw INTEGER, nombre_claw TEXT, '
+                'id_nest INTEGER, nombre_nest TEXT, cliente TEXT, inicio_campana TEXT, '
+                'nombre_cliente TEXT'
+                ')'
+            )
+        )
+        connection.execute(
+            text(
+                'INSERT INTO kam_campanas '
+                '(id_campana, id_claw, nombre_claw, cliente, inicio_campana, nombre_cliente) VALUES '
+                "(1, 229, 'FDA AGO26-2', 'FDA', '2026-07-24T17:55:49', 'Farmacias del ahorro'), "
+                "(2, 50, 'YZA JUN26', 'YZA', '2026-06-01T00:00:00', 'Farmacias YZA'), "
+                "(3, 199, 'FDA JUN26', 'FDA', '2026-06-10T00:00:00', 'Farmacias del ahorro')"
+            )
+        )
+    yield sqlite_engine
+    sqlite_engine.dispose()
 
 
-def _crear_cliente_con_respuesta(responder):
-    return httpx.Client(transport=httpx.MockTransport(responder))
-
-
-def test_listar_campanas_fda_filtra_por_clave_cliente(monkeypatch):
-    monkeypatch.setattr(config, 'RETOOL_CAMPANAS_WEBHOOK_URL', 'https://retool.example.com/webhook')
-
-    def responder(request):
-        return httpx.Response(200, json=PAYLOAD_RETOOL)
-
-    resultado = listar_campanas_fda_retool(_crear_cliente_con_respuesta(responder))
+def test_listar_campanas_fda_filtra_por_clave_cliente(retool_engine):
+    resultado = listar_campanas_fda_retool(retool_engine)
 
     assert {campana['id_claw'] for campana in resultado} == {229, 199}
 
 
-def test_listar_campanas_fda_ordena_mas_reciente_primero(monkeypatch):
-    monkeypatch.setattr(config, 'RETOOL_CAMPANAS_WEBHOOK_URL', 'https://retool.example.com/webhook')
-
-    def responder(request):
-        return httpx.Response(200, json=PAYLOAD_RETOOL)
-
-    resultado = listar_campanas_fda_retool(_crear_cliente_con_respuesta(responder))
+def test_listar_campanas_fda_ordena_mas_reciente_primero(retool_engine):
+    resultado = listar_campanas_fda_retool(retool_engine)
 
     assert [campana['id_claw'] for campana in resultado] == [229, 199]
 
 
-def test_listar_campanas_fda_ok_false_lanza_runtimeerror(monkeypatch):
-    monkeypatch.setattr(config, 'RETOOL_CAMPANAS_WEBHOOK_URL', 'https://retool.example.com/webhook')
+def test_listar_campanas_fda_no_invierte_cliente_y_clave(retool_engine):
+    resultado = listar_campanas_fda_retool(retool_engine)
 
-    def responder(request):
-        return httpx.Response(200, json={'ok': False})
-
-    with pytest.raises(RuntimeError):
-        listar_campanas_fda_retool(_crear_cliente_con_respuesta(responder))
-
-
-def test_listar_campanas_fda_error_http_lanza_runtimeerror(monkeypatch):
-    monkeypatch.setattr(config, 'RETOOL_CAMPANAS_WEBHOOK_URL', 'https://retool.example.com/webhook')
-
-    def responder(request):
-        return httpx.Response(503)
-
-    with pytest.raises(RuntimeError):
-        listar_campanas_fda_retool(_crear_cliente_con_respuesta(responder))
+    campana_229 = next(campana for campana in resultado if campana['id_claw'] == 229)
+    assert campana_229['cliente'] == 'Farmacias del ahorro'
+    assert campana_229['cliente_clave'] == 'FDA'
 
 
 def _sembrar_catalogo_eventos(engine):

@@ -28,13 +28,13 @@ def get_campanas_retool() -> list[dict]:
     Raises:
         HTTPException: 502 si Retool no responde o responde con error.
     """
-    retool_client = clients.get_retool_client()
+    retool_engine = clients.get_retool_engine()
     try:
-        return campanas.listar_campanas_fda_retool(retool_client)
+        return campanas.listar_campanas_fda_retool(retool_engine)
     except RuntimeError as error:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(error)) from error
     finally:
-        retool_client.close()
+        retool_engine.dispose()
 
 
 @router.post('/campanas', response_model=CampanaAltaOut)
