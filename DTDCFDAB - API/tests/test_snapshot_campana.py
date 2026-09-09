@@ -4,7 +4,10 @@ import pandas as pd
 import pytest
 
 from src.services.snapshot_campana import (
+    _calcular_extremo,
+    _configuracion_del_extremo,
     bloques_de_actividad,
+    calcular_etapa,
     inicio_por_bloque,
     punto_de_avance,
     regla_ciclo_folio_valido,
@@ -167,3 +170,114 @@ def test_regla_ciclo_folio_valido_descarta_folio_con_tramo_negativo():
 
     assert len(folios_validos) == 1
     assert metadatos['folios_invertidos'] == 1
+
+
+def test_configuracion_del_extremo_combina_lo_base_con_lo_propio_del_extremo():
+    configuracion_etapa = {
+        'unidad': 'folio', 'evento': ['fecha_arte'],
+        'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+    }
+
+    resultado = _configuracion_del_extremo(configuracion_etapa, 'inicio')
+
+    assert resultado == {'unidad': 'folio', 'evento': ['fecha_arte'], 'metodo': 'primero'}
+
+
+def test_calcular_extremo_metodo_primero_sobre_pool_de_evento():
+    datos = pd.DataFrame({'fecha_arte': pd.to_datetime(['2026-01-02', '2026-01-01'])})
+    configuracion_extremo = {'evento': ['fecha_arte'], 'metodo': 'primero'}
+
+    resultado = _calcular_extremo(datos, configuracion_extremo)
+
+    assert resultado['valor'] == pd.Timestamp('2026-01-01')
+    assert resultado['numero_unidades_total'] == 2
+    assert resultado['numero_unidades_con_dato'] == 2
+
+
+def test_calcular_extremo_metodo_avance():
+    datos = pd.DataFrame({'fecha_final': pd.to_datetime(['2026-01-01', '2026-01-02', '2026-01-03'])})
+    configuracion_extremo = {'evento_por_unidad': (None, 'fecha_final', None), 'metodo': 'avance', 'porcentaje': 0.5}
+
+    resultado = _calcular_extremo(datos, configuracion_extremo)
+
+    assert resultado['valor'] == pd.Timestamp('2026-01-02')
+
+
+def test_calcular_extremo_metodo_bloque():
+    datos = pd.DataFrame({'time': pd.to_datetime(['2026-01-01', '2026-01-01', '2026-01-10'])})
+    configuracion_extremo = {
+        'evento': ['time'], 'metodo': 'bloque', 'porcentaje_minimo': 0.5, 'dias_de_hueco': 3,
+    }
+
+    resultado = _calcular_extremo(datos, configuracion_extremo)
+
+    assert resultado['valor'] == pd.Timestamp('2026-01-01')
+    assert resultado['extras']['numero_bloques'] == 2
+
+
+def test_calcular_extremo_desde_inicio_filtra_filas_previas_al_inicio():
+    datos = pd.DataFrame({
+        'box_id': [1, 1, 2],
+        'time': pd.to_datetime(['2026-01-01', '2026-01-05', '2026-01-06']),
+    })
+    configuracion_extremo = {
+        'unidad': 'caja', 'metodo': 'avance', 'porcentaje': 1.0,
+        'evento_por_unidad': ('box_id', 'time', 'max'), 'desde': 'inicio',
+    }
+
+    resultado = _calcular_extremo(datos, configuracion_extremo, inicio=pd.Timestamp('2026-01-02'))
+
+    assert resultado['valor'] == pd.Timestamp('2026-01-06')
+    assert resultado['numero_unidades_total'] == 2
+
+
+def test_calcular_extremo_metodo_bloque_final():
+    datos = pd.DataFrame({'fecha_final': pd.to_datetime(['2026-01-01', '2026-01-02', '2026-01-20'])})
+    configuracion_extremo = {
+        'evento_por_unidad': (None, 'fecha_final', None), 'metodo': 'bloque_final', 'dias_de_hueco': 5,
+    }
+
+    resultado = _calcular_extremo(datos, configuracion_extremo)
+
+    assert resultado['valor'] == pd.Timestamp('2026-01-02')
+
+
+def test_calcular_extremo_metodo_desconocido_lanza_valueerror():
+    datos = pd.DataFrame({'fecha_arte': pd.to_datetime(['2026-01-01'])})
+    configuracion_extremo = {'evento': ['fecha_arte'], 'metodo': 'inventado'}
+
+    with pytest.raises(ValueError):
+        _calcular_extremo(datos, configuracion_extremo)
+
+
+def test_calcular_etapa_aplica_regla_y_calcula_inicio_y_fin():
+    datos_fuente = pd.DataFrame({
+        'id_claw': [229, 229],
+        'folio': ['A1', 'A2'],
+        'fecha_arte': pd.to_datetime(['2026-01-02', '2026-01-01']),
+        'fecha_preproyecto': pd.to_datetime([None, None]),
+        'fecha_aprobacion_arte': pd.to_datetime([None, None]),
+        'fecha_aprobacion_odt': pd.to_datetime([None, None]),
+    })
+    configuracion_etapa = {
+        'evento': ['fecha_arte'], 'deduplicar_por': ['id_claw', 'folio'], 'reglas': ['folios_validos'],
+        'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+    }
+
+    resultado_etapa, metadatos = calcular_etapa('artes', configuracion_etapa, datos_fuente)
+
+    assert resultado_etapa['inicio'] == pd.Timestamp('2026-01-01')
+    assert resultado_etapa['fin'] == pd.Timestamp('2026-01-02')
+    assert resultado_etapa['numero_unidades_total'] == 2
+    assert metadatos['folios_validos']['folios_validos'] == 2
+
+
+def test_calcular_etapa_regla_desconocida_lanza_keyerror():
+    datos_fuente = pd.DataFrame({'fecha_arte': pd.to_datetime(['2026-01-01'])})
+    configuracion_etapa = {
+        'evento': ['fecha_arte'], 'reglas': ['regla_inexistente'],
+        'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+    }
+
+    with pytest.raises(KeyError):
+        calcular_etapa('artes', configuracion_etapa, datos_fuente)

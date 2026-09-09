@@ -362,3 +362,213 @@ REGLAS_DISPONIBLES = {
     'precampana_dia_sin_operacion':  lambda datos, contexto: regla_precampana_dia_sin_operacion(datos),
     'rescate_entregas':              lambda datos, contexto: regla_rescate_entregas(datos, contexto),
 }
+
+
+def _configuracion_del_extremo(configuracion_etapa: dict, extremo: str) -> dict:
+    """Config efectiva de un extremo (inicio o fin): lo de la etapa, pisado por lo del extremo.
+
+    Permite que Pick & Pack declare unidades distintas en el inicio y en el
+    fin sin duplicar el resto de la configuración.
+
+    Args:
+        configuracion_etapa: entrada de la etapa en `CONFIGURACION_ETAPAS`.
+        extremo: `'inicio'` o `'fin'`.
+
+    Returns:
+        Dict combinado: llaves compartidas (`unidad`, `evento`,
+        `evento_por_unidad`) más las propias del extremo.
+    """
+    configuracion_base = {
+        llave: configuracion_etapa[llave]
+        for llave in ('unidad', 'evento', 'evento_por_unidad')
+        if llave in configuracion_etapa
+    }
+    configuracion_base.update(configuracion_etapa[extremo])
+    return configuracion_base
+
+
+def _serie_por_unidad(datos: pd.DataFrame, configuracion_extremo: dict) -> tuple[pd.Series, int, int]:
+    """Reduce los datos de la etapa a una fecha por unidad.
+
+    Dos formas según lo que declare la configuración:
+      - con `evento_por_unidad`: cada unidad aporta una fecha (una caja
+        aporta su último escaneo). Si la columna de unidad es `None`, cada
+        fila ya es una unidad (como en Entregas).
+      - sin `evento_por_unidad`: el pool son las columnas de `evento`
+        apiladas — lo que necesitan los métodos `primero`/`ultimo`.
+
+    Args:
+        datos: filas de la etapa, ya deduplicadas y filtradas por las reglas.
+        configuracion_extremo: la config efectiva del extremo.
+
+    Returns:
+        (serie ordenada de fechas, número de unidades total, número de
+        unidades con dato).
+    """
+    evento_por_unidad = configuracion_extremo.get('evento_por_unidad')
+    if evento_por_unidad is not None:
+        columna_unidad, columna_fecha, funcion_agregacion = evento_por_unidad
+        if columna_unidad is None:
+            fechas_validas = pd.to_datetime(datos[columna_fecha], errors='coerce').dropna()
+            return fechas_validas.sort_values(), int(len(datos)), int(len(fechas_validas))
+        numero_unidades_total = int(datos[columna_unidad].nunique())
+        fecha_por_unidad = (
+            datos.dropna(subset=[columna_fecha]).groupby(columna_unidad)[columna_fecha].agg(funcion_agregacion)
+        )
+        return fecha_por_unidad.sort_values(), numero_unidades_total, int(len(fecha_por_unidad))
+
+    columnas_evento = configuracion_extremo['evento']
+    eventos_agrupados = pd.concat([datos[columna] for columna in columnas_evento]).dropna()
+    numero_unidades_con_dato = int(datos[columnas_evento].notna().any(axis=1).sum())
+    return eventos_agrupados.sort_values(), int(len(datos)), numero_unidades_con_dato
+
+
+def _calcular_extremo(datos: pd.DataFrame, configuracion_extremo: dict, inicio: pd.Timestamp | None = None) -> dict:
+    """Calcula un extremo (inicio o fin) de una etapa.
+
+    Es el despachador central: cada etapa declara un método (`primero`,
+    `ultimo`, `avance`, `bloque` o `bloque_final`) para su inicio y su fin, y
+    esta función aplica el método correcto sin que el resto del código sepa
+    cuál es. Por ejemplo, Pick & Pack usa `bloque` para su inicio (para
+    ignorar cajas de prueba escaneadas antes de empezar de verdad) y
+    `avance` para su fin (el punto en que se completó cierto % de las cajas)
+    — ambos pasan por aquí.
+
+    Args:
+        datos: filas de la etapa, ya deduplicadas y filtradas por las reglas.
+        configuracion_extremo: la config efectiva del extremo (ver
+            `_configuracion_del_extremo`).
+        inicio: el inicio ya calculado, solo para los extremos con
+            `'desde': 'inicio'` (hoy, el fin de Pick & Pack).
+
+    Returns:
+        Dict con 'valor', 'numero_unidades_total', 'numero_unidades_con_dato',
+        'fecha_100' (la unidad más tardía, con o sin fecha de corte) y
+        'extras' (metadatos propios del método).
+
+    Raises:
+        ValueError: si `configuracion_extremo['metodo']` no es uno de
+            'primero', 'ultimo', 'avance', 'bloque', 'bloque_final'.
+    """
+    if configuracion_extremo.get('desde') == 'inicio' and pd.notna(inicio):
+        columna_fecha = configuracion_extremo['evento_por_unidad'][1]
+        datos = datos[datos[columna_fecha] >= inicio]
+
+    metodo = configuracion_extremo['metodo']
+
+    if metodo == 'bloque':
+        eventos_agrupados = pd.concat([datos[columna] for columna in configuracion_extremo['evento']]).dropna()
+        valor, resumen_de_bloques = inicio_por_bloque(
+            eventos_agrupados, configuracion_extremo['porcentaje_minimo'], configuracion_extremo['dias_de_hueco']
+        )
+        return {
+            'valor': valor,
+            'numero_unidades_total': int(len(eventos_agrupados)),
+            'numero_unidades_con_dato': int(len(eventos_agrupados)),
+            'fecha_100': eventos_agrupados.max() if len(eventos_agrupados) else pd.NaT,
+            'extras': {
+                'numero_bloques': int(len(resumen_de_bloques)),
+                'bloques_descartados': (
+                    int((~resumen_de_bloques['cuenta']).sum()) if len(resumen_de_bloques) else 0
+                ),
+            },
+        }
+
+    eventos_ordenados, numero_unidades_total, numero_unidades_con_dato = _serie_por_unidad(
+        datos, configuracion_extremo
+    )
+    fecha_100 = eventos_ordenados.max() if len(eventos_ordenados) else pd.NaT
+    extras = {}
+
+    if metodo == 'primero':
+        valor = eventos_ordenados.min() if len(eventos_ordenados) else pd.NaT
+    elif metodo == 'ultimo':
+        valor = fecha_100
+    elif metodo == 'avance':
+        valor = punto_de_avance(eventos_ordenados, configuracion_extremo['porcentaje'])
+    elif metodo == 'bloque_final':
+        _, resumen_de_bloques = bloques_de_actividad(eventos_ordenados, configuracion_extremo['dias_de_hueco'])
+        if resumen_de_bloques.empty:
+            valor = pd.NaT
+        else:
+            bloque_principal = resumen_de_bloques['n'].idxmax()
+            valor = resumen_de_bloques.loc[bloque_principal, 'fin']
+        extras = {
+            'numero_bloques_fin': int(len(resumen_de_bloques)),
+            'unidades_tras_bloque_final': int((eventos_ordenados > valor).sum()) if pd.notna(valor) else 0,
+        }
+    else:
+        raise ValueError(f'método desconocido: {metodo!r}')
+
+    return {
+        'valor': valor,
+        'numero_unidades_total': numero_unidades_total,
+        'numero_unidades_con_dato': numero_unidades_con_dato,
+        'fecha_100': fecha_100,
+        'extras': extras,
+    }
+
+
+def calcular_etapa(
+    nombre_etapa: str, configuracion_etapa: dict, datos_fuente: pd.DataFrame, contexto: dict | None = None
+) -> tuple[dict, dict]:
+    """Calcula inicio, fin y metadatos de una etapa para la campaña.
+
+    Es la función que arma una etapa completa (por ejemplo, "Carga de
+    Artes") a partir de sus datos crudos: deduplica, aplica las reglas de
+    calidad que le tocan (Task 2), y calcula sus dos extremos con
+    `_calcular_extremo`. `calcular_etapas` (Task 4) la llama una vez por
+    cada una de las 7 etapas de la campaña.
+
+    Args:
+        nombre_etapa: clave de la etapa, para mensajes de error.
+        configuracion_etapa: su entrada de `CONFIGURACION_ETAPAS`.
+        datos_fuente: DataFrame crudo de la fuente de esta etapa, ya filtrado
+            a una sola campaña.
+        contexto: dependencias entre etapas y parámetros de reglas —
+            'fin_pick_pack' (cross-etapa) y 'desfase_rescate_dias'
+            (parámetro configurable que necesita `regla_rescate_entregas`).
+
+    Returns:
+        (resultado_etapa, metadatos_de_reglas)
+        resultado_etapa: {'inicio', 'fin', 'numero_unidades_total',
+            'numero_unidades_con_dato', 'porcentaje_alcanzado',
+            'fecha_completado_al_100', **extras de cada extremo}
+        metadatos_de_reglas: {nombre_regla: sus metadatos}
+
+    Raises:
+        KeyError: si `configuracion_etapa['reglas']` nombra una regla que no
+            está en `REGLAS_DISPONIBLES`.
+    """
+    contexto = contexto or {}
+    datos = datos_fuente.copy()
+    if configuracion_etapa.get('deduplicar_por'):
+        datos = datos.drop_duplicates(subset=configuracion_etapa['deduplicar_por'])
+
+    metadatos_de_reglas = {}
+    for nombre_regla in configuracion_etapa.get('reglas', []):
+        if nombre_regla not in REGLAS_DISPONIBLES:
+            raise KeyError(f'etapa {nombre_etapa!r}: regla desconocida {nombre_regla!r}')
+        datos, metadatos_de_reglas[nombre_regla] = REGLAS_DISPONIBLES[nombre_regla](datos, contexto)
+
+    configuracion_inicio = _configuracion_del_extremo(configuracion_etapa, 'inicio')
+    configuracion_fin = _configuracion_del_extremo(configuracion_etapa, 'fin')
+    resultado_inicio = _calcular_extremo(datos, configuracion_inicio)
+    resultado_fin = _calcular_extremo(datos, configuracion_fin, inicio=resultado_inicio['valor'])
+
+    numero_unidades_total = resultado_fin['numero_unidades_total']
+    numero_unidades_con_dato = resultado_fin['numero_unidades_con_dato']
+
+    resultado_etapa = {
+        'inicio': resultado_inicio['valor'],
+        'fin': resultado_fin['valor'],
+        'numero_unidades_total': numero_unidades_total,
+        'numero_unidades_con_dato': numero_unidades_con_dato,
+        'porcentaje_alcanzado': (
+            numero_unidades_con_dato / numero_unidades_total if numero_unidades_total else float('nan')
+        ),
+        'fecha_completado_al_100': resultado_fin['fecha_100'],
+        **resultado_inicio['extras'],
+        **resultado_fin['extras'],
+    }
+    return resultado_etapa, metadatos_de_reglas
