@@ -94,10 +94,12 @@ def post_job_ejecutar(id_job_ejecucion: int) -> dict:
     """
     engine = clients.get_db_engine()
     claw_client = clients.get_claw_client()
+    retool_engine = clients.get_retool_engine()
     try:
-        return jobs.ejecutar_job(engine, id_job_ejecucion, claw_client=claw_client, retool_engine=None)
+        return jobs.ejecutar_job(engine, id_job_ejecucion, claw_client=claw_client, retool_engine=retool_engine)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     finally:
         engine.dispose()
         claw_client.close()
+        retool_engine.dispose()

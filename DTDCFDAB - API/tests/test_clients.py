@@ -18,6 +18,22 @@ def test_get_db_engine_arma_url_con_los_datos_de_config(monkeypatch):
     assert engine.url.database == 'db1'
 
 
+def test_get_retool_engine_arma_url_con_los_datos_de_config(monkeypatch):
+    monkeypatch.setattr(config, 'RETOOL_DB_USER', 'user2')
+    monkeypatch.setattr(config, 'RETOOL_DB_PASSWORD', 'pass2')
+    monkeypatch.setattr(config, 'RETOOL_DB_HOST', 'host2')
+    monkeypatch.setattr(config, 'RETOOL_DB_PORT', 5432)
+    monkeypatch.setattr(config, 'RETOOL_DB_NAME', 'db2')
+
+    engine = clients.get_retool_engine()
+
+    assert engine.url.username == 'user2'
+    assert engine.url.host == 'host2'
+    assert engine.url.port == 5432
+    assert engine.url.database == 'db2'
+    assert engine.url.query['sslmode'] == 'require'
+
+
 def test_get_claw_client_manda_header_api_key(monkeypatch):
     monkeypatch.setattr(config, 'API_KEY_CLAW', 'claw-key')
     monkeypatch.setattr(config, 'API_BASE_URL_CLAW', 'https://claw.example.com')

@@ -22,6 +22,13 @@ API_BASE_URL_DTDC_FDA_BUHO = os.getenv('API_BASE_URL_DTDC_FDA_BUHO', '')
 RETOOL_CAMPANAS_API_KEY = os.getenv('RETOOL_CAMPANAS_API_KEY', '')
 RETOOL_CAMPANAS_WEBHOOK_URL = os.getenv('RETOOL_CAMPANAS_WEBHOOK_URL', '')
 
+# --- Retool DB (fuente del ETL: artes, preproyectos, aprobaciones, precampana) ---
+RETOOL_DB_HOST = os.getenv('RETOOL_DB_HOST', '')
+RETOOL_DB_PORT = int(os.getenv('RETOOL_DB_PORT', '5432'))
+RETOOL_DB_USER = os.getenv('RETOOL_DB_USER', '')
+RETOOL_DB_PASSWORD = os.getenv('RETOOL_DB_PASSWORD', '')
+RETOOL_DB_NAME = os.getenv('RETOOL_DB_NAME', '')
+
 # --- Claw (fuentes del ETL, secrets compartidos con otros proyectos del equipo) ---
 API_KEY_CLAW = os.getenv('API_KEY_CLAW', '')
 API_BASE_URL_CLAW = os.getenv('API_BASE_URL_CLAW', '')
@@ -42,6 +49,10 @@ REQUIRED_VARS = [
     'API_KEY_DTDC_FDA_BUHO',
     'RETOOL_CAMPANAS_API_KEY',
     'RETOOL_CAMPANAS_WEBHOOK_URL',
+    'RETOOL_DB_HOST',
+    'RETOOL_DB_USER',
+    'RETOOL_DB_PASSWORD',
+    'RETOOL_DB_NAME',
     'GCP_PROJECT_ID',
 ]
 

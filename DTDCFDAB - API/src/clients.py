@@ -43,6 +43,26 @@ def get_db_engine() -> Engine:
     )
 
 
+def get_retool_engine() -> Engine:
+    """Crea un engine de SQLAlchemy hacia Retool DB (Postgres).
+
+    Es la fuente cruda de la que `snapshot_campana.py` lee artes,
+    preproyectos, aprobaciones, impresión y precampaña — sin este engine,
+    `calcular_snapshot_campana` no tiene de dónde traer esas cinco etapas
+    (Pick & Pack y Entregas vienen de Claw, no de aquí).
+
+    Returns:
+        Un `Engine` de SQLAlchemy con `pool_pre_ping` activo. La conexión
+        exige TLS (`sslmode=require`) porque Retool DB no acepta conexiones
+        sin cifrar.
+    """
+    connection_url = (
+        f'postgresql+psycopg2://{config.RETOOL_DB_USER}:{config.RETOOL_DB_PASSWORD}'
+        f'@{config.RETOOL_DB_HOST}:{config.RETOOL_DB_PORT}/{config.RETOOL_DB_NAME}?sslmode=require'
+    )
+    return create_engine(connection_url, pool_pre_ping=True)
+
+
 def get_claw_client() -> httpx.Client:
     """Crea un cliente HTTP hacia la base de Claw (Pick & Pack y Entregas).
 

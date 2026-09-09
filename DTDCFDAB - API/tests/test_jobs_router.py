@@ -75,8 +75,10 @@ def test_post_job_ejecutar(monkeypatch):
     job_final = {**JOB_DE_EJEMPLO, 'estado': 'fallido', 'error': 'Politica D pendiente'}
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.clients.get_claw_client'), \
+         patch('src.routers.jobs.clients.get_retool_engine') as mock_get_retool_engine, \
          patch('src.routers.jobs.jobs.ejecutar_job', return_value=job_final):
         mock_get_db_engine.return_value.dispose = lambda: None
+        mock_get_retool_engine.return_value.dispose = lambda: None
         response = client.post('/jobs/1/ejecutar', headers=HEADERS)
     assert response.status_code == 200
     assert response.json()['estado'] == 'fallido'
@@ -86,7 +88,9 @@ def test_post_job_ejecutar_job_inexistente_404(monkeypatch):
     monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.clients.get_claw_client'), \
+         patch('src.routers.jobs.clients.get_retool_engine') as mock_get_retool_engine, \
          patch('src.routers.jobs.jobs.ejecutar_job', side_effect=ValueError('no existe')):
         mock_get_db_engine.return_value.dispose = lambda: None
+        mock_get_retool_engine.return_value.dispose = lambda: None
         response = client.post('/jobs/999/ejecutar', headers=HEADERS)
     assert response.status_code == 404
