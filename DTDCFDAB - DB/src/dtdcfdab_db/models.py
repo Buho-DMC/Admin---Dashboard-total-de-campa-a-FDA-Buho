@@ -10,7 +10,7 @@ una query.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Integer, String, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -52,3 +52,23 @@ class Campana(Base):
     nombre: Mapped[str] = mapped_column(String(255), nullable=False)
     inicio_campana: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     fecha_alta: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class CampanaEvento(Base):
+    """Fecha vigente de un hito FDA capturado a mano para una campaña.
+
+    Solo guarda la versión vigente (sin historial de cómo cambió) — cada
+    captura hace UPSERT sobre la misma fila en vez de insertar una nueva.
+    """
+
+    __tablename__ = 'dtdcfdab_campana_evento'
+
+    id_campana: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_campana.id_campana'), primary_key=True)
+    id_evento: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_evento.id_evento'), primary_key=True)
+    fecha: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    actualizado_en: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        server_default=text('CURRENT_TIMESTAMP'),
+        server_onupdate=text('CURRENT_TIMESTAMP'),
+    )
