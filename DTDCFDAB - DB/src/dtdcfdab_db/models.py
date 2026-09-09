@@ -11,7 +11,7 @@ una query.
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DECIMAL, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import DECIMAL, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -142,3 +142,31 @@ class CampanaSnapshot(Base):
     respuesta_fda_dias: Mapped[Decimal | None] = mapped_column(DECIMAL(9, 4), nullable=True)
     folios_invertidos: Mapped[int | None] = mapped_column(Integer, nullable=True)
     calculado_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class JobEjecucion(Base):
+    """Una fila por campaña de un job de ETL, agrupable por id_lote para ver progreso de un lote.
+
+    `iniciado_en` queda en NULL mientras el job está 'pendiente' — la API lo
+    llena solo al pasar a 'corriendo', así que forzar NOT NULL aquí rompería
+    la inserción inicial de cada job.
+    """
+
+    __tablename__ = 'dtdcfdab_job_ejecucion'
+
+    id_job_ejecucion: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id_campana: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_campana.id_campana'), nullable=False)
+    id_lote: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    id_configuracion: Mapped[int] = mapped_column(
+        ForeignKey('dtdcfdab_configuracion.id_configuracion'), nullable=False
+    )
+    tipo: Mapped[str] = mapped_column(String(16), nullable=False)
+    estado: Mapped[str] = mapped_column(String(16), nullable=False, server_default='pendiente')
+    iniciado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    terminado_en: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint("tipo IN ('alta','recalculo')", name='ck_job_tipo'),
+        CheckConstraint("estado IN ('pendiente','corriendo','exitoso','fallido')", name='ck_job_estado'),
+    )
