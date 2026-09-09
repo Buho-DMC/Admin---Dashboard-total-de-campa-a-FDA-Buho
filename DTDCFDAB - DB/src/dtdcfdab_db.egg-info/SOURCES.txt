@@ -1,0 +1,8 @@
+pyproject.toml
+src/dtdcfdab_db/__init__.py
+src/dtdcfdab_db/db.py
+src/dtdcfdab_db.egg-info/PKG-INFO
+src/dtdcfdab_db.egg-info/SOURCES.txt
+src/dtdcfdab_db.egg-info/dependency_links.txt
+src/dtdcfdab_db.egg-info/top_level.txt
+tests/test_conexion.py
