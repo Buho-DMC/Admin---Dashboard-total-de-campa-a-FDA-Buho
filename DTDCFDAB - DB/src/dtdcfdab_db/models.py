@@ -95,3 +95,50 @@ class Configuracion(Base):
     cobertura_aviso: Mapped[Decimal] = mapped_column(DECIMAL(5, 4), nullable=False)
     es_vigente: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('0'))
     creado_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
+
+
+class CampanaSnapshot(Base):
+    """Resultado completo de un ETL para (campaña, configuración) — atómico, nunca a medias.
+
+    Un fallo del ETL nunca deja una fila parcial aquí: la API solo inserta el
+    snapshot completo tras terminar las 7 etapas y los 3 KPIs de ciclo. Sin
+    esta fila, el dashboard muestra la campaña como "pendiente", nunca datos
+    viejos disfrazados de vigentes.
+    """
+
+    __tablename__ = 'dtdcfdab_campana_snapshot'
+
+    id_campana: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_campana.id_campana'), primary_key=True)
+    id_configuracion: Mapped[int] = mapped_column(
+        ForeignKey('dtdcfdab_configuracion.id_configuracion'), primary_key=True
+    )
+
+    inicio_carga_artes: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_carga_artes: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inicio_carga_preproyectos: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_carga_preproyectos: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inicio_aprobaciones: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_aprobaciones: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inicio_impresion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_impresion: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inicio_precampana: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_precampana: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inicio_pick_pack: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_pick_pack: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    inicio_entregas: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    fin_entregas: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    porcentaje_alcanzado_entregas: Mapped[Decimal | None] = mapped_column(DECIMAL(9, 6), nullable=True)
+    ultima_entrega: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    numero_envios: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    envios_con_fecha: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    envios_sin_fecha: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    envios_sin_registro_entrega: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    numero_cajas_pick_pack: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    numero_folios: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    numero_odps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    numero_actividades: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    respuesta_buho_dias: Mapped[Decimal | None] = mapped_column(DECIMAL(9, 4), nullable=True)
+    respuesta_fda_dias: Mapped[Decimal | None] = mapped_column(DECIMAL(9, 4), nullable=True)
+    folios_invertidos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    calculado_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
