@@ -81,18 +81,6 @@ def get_claw_client() -> httpx.Client:
     )
 
 
-def get_retool_client() -> httpx.Client:
-    """Crea un cliente HTTP para el workflow de Retool que lista campañas.
-
-    Returns:
-        Un `httpx.Client` con el header `X-Workflow-Api-Key` ya configurado.
-    """
-    return httpx.Client(
-        headers={'X-Workflow-Api-Key': config.RETOOL_CAMPANAS_API_KEY, 'Content-Type': 'application/json'},
-        timeout=15.0,
-    )
-
-
 def get_tasks_client() -> tasks_v2.CloudTasksClient:
     """Crea el cliente de Cloud Tasks usado para encolar jobs.
 

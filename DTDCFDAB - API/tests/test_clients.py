@@ -45,15 +45,6 @@ def test_get_claw_client_manda_header_api_key(monkeypatch):
     client.close()
 
 
-def test_get_retool_client_manda_header_workflow_api_key(monkeypatch):
-    monkeypatch.setattr(config, 'RETOOL_CAMPANAS_API_KEY', 'retool-key')
-
-    client = clients.get_retool_client()
-
-    assert client.headers['x-workflow-api-key'] == 'retool-key'
-    client.close()
-
-
 def test_get_tasks_client_regresa_cliente_de_cloud_tasks():
     with patch('src.clients.tasks_v2.CloudTasksClient') as mock_cloud_tasks_client_class:
         mock_cloud_tasks_client_class.return_value = MagicMock()

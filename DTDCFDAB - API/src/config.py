@@ -18,11 +18,8 @@ MYSQL_DB = os.getenv('MYSQL_DB_DMC_GENERAL', '')
 API_KEY_DTDC_FDA_BUHO = os.getenv('API_KEY_DTDC_FDA_BUHO', '')
 API_BASE_URL_DTDC_FDA_BUHO = os.getenv('API_BASE_URL_DTDC_FDA_BUHO', '')
 
-# --- Retool (selector de campañas FDA) ---
-RETOOL_CAMPANAS_API_KEY = os.getenv('RETOOL_CAMPANAS_API_KEY', '')
-RETOOL_CAMPANAS_WEBHOOK_URL = os.getenv('RETOOL_CAMPANAS_WEBHOOK_URL', '')
-
-# --- Retool DB (fuente del ETL: artes, preproyectos, aprobaciones, precampana) ---
+# --- Retool DB (fuente del ETL: artes, preproyectos, aprobaciones, precampana; también
+# el selector de campañas FDA, vía `kam_campanas`) ---
 RETOOL_DB_HOST = os.getenv('RETOOL_DB_HOST', '')
 RETOOL_DB_PORT = int(os.getenv('RETOOL_DB_PORT', '5432'))
 RETOOL_DB_USER = os.getenv('RETOOL_DB_USER', '')
@@ -47,8 +44,6 @@ REQUIRED_VARS = [
     'MYSQL_PASSWORD_DMC_GENERAL',
     'MYSQL_DB_DMC_GENERAL',
     'API_KEY_DTDC_FDA_BUHO',
-    'RETOOL_CAMPANAS_API_KEY',
-    'RETOOL_CAMPANAS_WEBHOOK_URL',
     'RETOOL_DB_HOST',
     'RETOOL_DB_USER',
     'RETOOL_DB_PASSWORD',
