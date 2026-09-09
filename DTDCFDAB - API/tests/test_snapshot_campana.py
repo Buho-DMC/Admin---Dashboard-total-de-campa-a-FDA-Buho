@@ -4,7 +4,9 @@ import httpx
 import pandas as pd
 import pytest
 
+import src.services.snapshot_campana as snapshot_campana_module
 from src.services.snapshot_campana import (
+    calcular_snapshot_campana,
     RUTA_CLAW_PICKS,
     RUTA_CLAW_TRACKING,
     _calcular_extremo,
@@ -451,3 +453,82 @@ def test_obtener_datos_claw_sin_registros_regresa_none():
     resultado = obtener_datos_claw(_cliente_claw_de_prueba(handler), RUTA_CLAW_PICKS, 229)
 
     assert resultado is None
+
+
+def test_calcular_snapshot_campana_produce_las_14_fechas_y_13_metadatos(monkeypatch):
+    fuentes = _fuentes_de_campana_de_ejemplo()
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_digital',
+        lambda retool_engine, id_claw: fuentes['retool_digital'],
+    )
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_precampana',
+        lambda retool_engine, id_claw: fuentes['retool_precampana'],
+    )
+
+    def claw_falso(claw_client, ruta_base, id_claw):
+        if ruta_base == snapshot_campana_module.RUTA_CLAW_PICKS:
+            return fuentes['claw_picks']
+        return fuentes['claw_tracking']
+
+    monkeypatch.setattr(snapshot_campana_module, 'obtener_datos_claw', claw_falso)
+
+    snapshot = calcular_snapshot_campana(
+        id_claw=229, configuracion=CONFIGURACION_DE_EJEMPLO, claw_client=None, retool_engine=None
+    )
+
+    # env2 se rescata con Fecha Última Actualización + desfase_rescate_dias (0.622 en
+    # CONFIGURACION_DE_EJEMPLO) — se calcula aquí, no se hardcodea, para no depender de
+    # redondeo de punto flotante en un timestamp con precisión de microsegundos.
+    fecha_entrega_rescatada_de_env2 = pd.Timestamp('2026-01-16') + pd.Timedelta(
+        days=CONFIGURACION_DE_EJEMPLO['desfase_rescate_dias']
+    )
+
+    # las 14 fechas
+    assert snapshot['inicio_carga_artes'] == pd.Timestamp('2026-01-01')
+    assert snapshot['fin_carga_artes'] == pd.Timestamp('2026-01-02')
+    assert snapshot['inicio_carga_preproyectos'] == pd.Timestamp('2026-01-02')
+    assert snapshot['fin_carga_preproyectos'] == pd.Timestamp('2026-01-03')
+    assert snapshot['inicio_aprobaciones'] == pd.Timestamp('2026-01-03')
+    assert snapshot['fin_aprobaciones'] == pd.Timestamp('2026-01-05')
+    assert snapshot['inicio_impresion'] == pd.Timestamp('2026-01-05 08:00:00')
+    assert snapshot['fin_impresion'] == pd.Timestamp('2026-01-06 08:05:00')
+    assert snapshot['inicio_precampana'] == pd.Timestamp('2026-01-01 08:00:00')
+    assert snapshot['fin_precampana'] == pd.Timestamp('2026-01-02 11:00:00')
+    assert snapshot['inicio_pick_pack'] == pd.Timestamp('2026-01-10 08:00:00')
+    assert snapshot['fin_pick_pack'] == pd.Timestamp('2026-01-10 09:15:00')
+    assert snapshot['inicio_entregas'] == pd.Timestamp('2026-01-15')
+    # fin_entregas: bloque_final con hueco=10 días — env1 (01-15) y env2 (rescatado, ~01-16)
+    # caen en un solo bloque (gap < 10 días), así que el fin es el máximo de las dos.
+    assert snapshot['fin_entregas'] == fecha_entrega_rescatada_de_env2
+
+    # los 13 metadatos
+    assert snapshot['porcentaje_alcanzado_entregas'] == pytest.approx(2 / 3)
+    assert snapshot['ultima_entrega'] == fecha_entrega_rescatada_de_env2
+    assert snapshot['numero_envios'] == 3
+    assert snapshot['envios_con_fecha'] == 2
+    assert snapshot['envios_sin_fecha'] == 0
+    assert snapshot['envios_sin_registro_entrega'] == 1
+    assert snapshot['numero_cajas_pick_pack'] == 2
+    assert snapshot['numero_folios'] == 2
+    assert snapshot['numero_odps'] == 2
+    assert snapshot['numero_actividades'] == 2
+    assert snapshot['respuesta_buho_dias'] == pytest.approx(1.0)
+    assert snapshot['respuesta_fda_dias'] == pytest.approx(2.0)
+    assert snapshot['folios_invertidos'] == 0
+
+
+def test_calcular_snapshot_campana_sin_picks_de_claw_lanza_valueerror(monkeypatch):
+    fuentes = _fuentes_de_campana_de_ejemplo()
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_digital',
+        lambda retool_engine, id_claw: fuentes['retool_digital'],
+    )
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_precampana',
+        lambda retool_engine, id_claw: fuentes['retool_precampana'],
+    )
+    monkeypatch.setattr(snapshot_campana_module, 'obtener_datos_claw', lambda claw_client, ruta_base, id_claw: None)
+
+    with pytest.raises(ValueError):
+        calcular_snapshot_campana(id_claw=229, configuracion=CONFIGURACION_DE_EJEMPLO, claw_client=None, retool_engine=None)

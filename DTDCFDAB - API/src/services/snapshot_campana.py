@@ -894,3 +894,108 @@ def obtener_datos_claw(claw_client: httpx.Client, ruta_base: str, id_claw: int) 
     if not datos_json:
         return None
     return pd.DataFrame(datos_json)
+
+
+COLUMNAS_POR_ETAPA = {
+    'artes':        ('inicio_carga_artes', 'fin_carga_artes'),
+    'preproyectos': ('inicio_carga_preproyectos', 'fin_carga_preproyectos'),
+    'aprobaciones': ('inicio_aprobaciones', 'fin_aprobaciones'),
+    'impresion':    ('inicio_impresion', 'fin_impresion'),
+    'precampana':   ('inicio_precampana', 'fin_precampana'),
+    'pick_pack':    ('inicio_pick_pack', 'fin_pick_pack'),
+    'entregas':     ('inicio_entregas', 'fin_entregas'),
+}
+
+
+def _ensamblar_snapshot(resultados_etapas: dict, metadatos_etapas: dict, kpis_ciclo: dict) -> dict:
+    """Arma el dict final con las llaves exactas de `dtdcfdab_campana_snapshot`.
+
+    Es el último paso del cálculo: toma los resultados sueltos de las 7
+    etapas y los 3 KPIs de ciclo, y los aplana en el dict plano de 27 llaves
+    que espera la tabla `dtdcfdab_campana_snapshot` — `jobs.py::ejecutar_job`
+    lo inserta directamente por nombre de columna, sin transformación
+    adicional.
+
+    Args:
+        resultados_etapas: {etapa: resultado_etapa}, de `calcular_etapas`.
+        metadatos_etapas: {etapa: metadatos_de_reglas}, de `calcular_etapas`.
+        kpis_ciclo: de `calcular_kpis_ciclo_folio`.
+
+    Returns:
+        Dict con las 14 columnas de fecha y las 13 de metadatos.
+    """
+    snapshot = {}
+    for nombre_etapa, (columna_inicio, columna_fin) in COLUMNAS_POR_ETAPA.items():
+        snapshot[columna_inicio] = resultados_etapas[nombre_etapa]['inicio']
+        snapshot[columna_fin] = resultados_etapas[nombre_etapa]['fin']
+
+    entregas = resultados_etapas['entregas']
+    metadatos_rescate = metadatos_etapas['entregas']['rescate_entregas']
+    snapshot.update({
+        'porcentaje_alcanzado_entregas': entregas['porcentaje_alcanzado'],
+        'ultima_entrega': entregas['fecha_completado_al_100'],
+        'numero_envios': entregas['numero_unidades_total'],
+        'envios_con_fecha': entregas['numero_unidades_con_dato'],
+        'envios_sin_fecha': metadatos_rescate['sin_fecha_entregado'],
+        'envios_sin_registro_entrega': metadatos_rescate['sin_registro_entrega'],
+        'numero_cajas_pick_pack': resultados_etapas['pick_pack']['numero_unidades_total'],
+        'numero_folios': resultados_etapas['artes']['numero_unidades_total'],
+        'numero_odps': resultados_etapas['impresion']['numero_unidades_total'],
+        'numero_actividades': resultados_etapas['precampana']['numero_unidades_total'],
+        'respuesta_buho_dias': kpis_ciclo['respuesta_buho_mediana_dias'],
+        'respuesta_fda_dias': kpis_ciclo['respuesta_fda_mediana_dias'],
+        'folios_invertidos': kpis_ciclo['folios_invertidos'],
+    })
+    return snapshot
+
+
+def calcular_snapshot_campana(id_claw: int, configuracion: dict, claw_client: httpx.Client, retool_engine) -> dict:
+    """Calcula las 14 fechas y 13 metadatos de una campaña.
+
+    Es la interfaz pública de todo el módulo — el único punto de entrada que
+    usa el resto de la API (`jobs.py::ejecutar_job`) para correr el cálculo
+    completo de una campaña: trae los datos crudos de Retool y Claw, corre
+    las 7 etapas y los KPIs de ciclo, y regresa el dict listo para insertar
+    en `dtdcfdab_campana_snapshot`. Reemplaza por completo lo que antes era
+    `politica_d.calcular` (un `NotImplementedError` sin implementar). Método
+    conocido como "Política D" en la auditoría original — ver
+    AUDITORIA_ETL.txt §8-19 para la justificación de negocio completa.
+
+    Args:
+        id_claw: id de la campaña en Claw.
+        configuracion: los 6 parámetros vigentes de `dtdcfdab_configuracion`.
+        claw_client: cliente HTTP hacia Claw (`clients.get_claw_client`).
+        retool_engine: engine de SQLAlchemy hacia Retool DB.
+
+    Returns:
+        Dict con las llaves exactas de `dtdcfdab_campana_snapshot` —
+        `jobs.py::ejecutar_job` lo inserta directamente por nombre de columna.
+
+    Raises:
+        ValueError: si Retool no trae folios, o si Claw no trae escaneos de
+            Pick & Pack o tracking de Entregas, para este `id_claw`. Un ETL
+            que truena es preferible a uno que publica huecos sin explicación.
+    """
+    datos_retool_digital = obtener_datos_retool_digital(retool_engine, id_claw)
+    datos_retool_precampana = obtener_datos_retool_precampana(retool_engine, id_claw)
+    datos_claw_picks = obtener_datos_claw(claw_client, RUTA_CLAW_PICKS, id_claw)
+    datos_claw_tracking = obtener_datos_claw(claw_client, RUTA_CLAW_TRACKING, id_claw)
+
+    if datos_claw_picks is None or datos_claw_picks.empty:
+        raise ValueError(f'Claw no devolvió escaneos de Pick & Pack para id_claw={id_claw}.')
+    if datos_claw_tracking is None or datos_claw_tracking.empty:
+        raise ValueError(f'Claw no devolvió tracking de Entregas para id_claw={id_claw}.')
+
+    fuentes = {
+        'retool_digital': datos_retool_digital,
+        'retool_precampana': datos_retool_precampana,
+        'claw_picks': datos_claw_picks,
+        'claw_tracking': datos_claw_tracking,
+    }
+    configuracion_etapas = _construir_configuracion_etapas(configuracion)
+    contexto_inicial = {'desfase_rescate_dias': configuracion['desfase_rescate_dias']}
+
+    resultados_etapas, metadatos_etapas = calcular_etapas(fuentes, configuracion_etapas, contexto_inicial)
+    kpis_ciclo = calcular_kpis_ciclo_folio(datos_retool_digital)
+
+    return _ensamblar_snapshot(resultados_etapas, metadatos_etapas, kpis_ciclo)
