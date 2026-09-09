@@ -10,7 +10,7 @@ una query.
 
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, Integer, String
+from sqlalchemy import CheckConstraint, DateTime, Integer, String, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -39,3 +39,16 @@ class Evento(Base):
         CheckConstraint("origen IN ('manual')", name='ck_evento_origen'),
         CheckConstraint("rol IN ('hito')", name='ck_evento_rol'),
     )
+
+
+class Campana(Base):
+    """Una campaña FDA dada de alta, identificada por su id_claw único de Retool/Claw."""
+
+    __tablename__ = 'dtdcfdab_campana'
+
+    id_campana: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    id_claw: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
+    cliente: Mapped[str] = mapped_column(String(32), nullable=False, server_default='FDA')
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    inicio_campana: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    fecha_alta: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
