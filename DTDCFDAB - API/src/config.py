@@ -15,22 +15,21 @@ MYSQL_PASSWORD = os.getenv('MYSQL_PASSWORD_DMC_GENERAL', '')
 MYSQL_DB = os.getenv('MYSQL_DB_DMC_GENERAL', '')
 
 # --- Autenticación interna (Dashboard y Cloud Tasks -> esta API) ---
-API_KEY_DTDCFDAB = os.getenv('API_KEY_DTDCFDAB', '')
-API_BASE_URL_DTDCFDAB = os.getenv('API_BASE_URL_DTDCFDAB', '')
+API_KEY_DTDC_FDA_BUHO = os.getenv('API_KEY_DTDC_FDA_BUHO', '')
+API_BASE_URL_DTDC_FDA_BUHO = os.getenv('API_BASE_URL_DTDC_FDA_BUHO', '')
 
 # --- Retool (selector de campañas FDA) ---
 RETOOL_CAMPANAS_API_KEY = os.getenv('RETOOL_CAMPANAS_API_KEY', '')
 RETOOL_CAMPANAS_WEBHOOK_URL = os.getenv('RETOOL_CAMPANAS_WEBHOOK_URL', '')
 
-# --- Claw (fuentes del ETL, pendiente de confirmar credenciales) ---
-CLAW_API_KEY = os.getenv('CLAW_API_KEY', '')
-CLAW_BASE_URL_PICKS = os.getenv('CLAW_BASE_URL_PICKS', '')
-CLAW_BASE_URL_TRACKING = os.getenv('CLAW_BASE_URL_TRACKING', '')
+# --- Claw (fuentes del ETL, secrets compartidos con otros proyectos del equipo) ---
+API_KEY_CLAW = os.getenv('API_KEY_CLAW', '')
+API_BASE_URL_CLAW = os.getenv('API_BASE_URL_CLAW', '')
 
 # --- Cloud Tasks / GCP ---
 GCP_PROJECT_ID = os.getenv('GCP_PROJECT_ID', '')
 GCP_LOCATION = os.getenv('GCP_LOCATION', 'us-central1')
-TASKS_QUEUE = os.getenv('TASKS_QUEUE', 'dtdcfdab-jobs')
+TASKS_QUEUE = os.getenv('TASKS_QUEUE', 'dtdc-fda-buho-jobs')
 
 # --- Servidor ---
 PORT = int(os.getenv('PORT', '8080'))
@@ -40,7 +39,7 @@ REQUIRED_VARS = [
     'MYSQL_USER_DMC_GENERAL',
     'MYSQL_PASSWORD_DMC_GENERAL',
     'MYSQL_DB_DMC_GENERAL',
-    'API_KEY_DTDCFDAB',
+    'API_KEY_DTDC_FDA_BUHO',
     'RETOOL_CAMPANAS_API_KEY',
     'RETOOL_CAMPANAS_WEBHOOK_URL',
     'GCP_PROJECT_ID',

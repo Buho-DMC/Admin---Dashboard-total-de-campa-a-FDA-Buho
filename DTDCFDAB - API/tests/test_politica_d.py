@@ -9,4 +9,4 @@ def test_calcular_no_esta_implementado_todavia():
     Portarlo es una sesion de brainstorming + plan separada (requiere ademas las credenciales de
     Claw, aun sin confirmar). Este test documenta el limite de alcance."""
     with pytest.raises(NotImplementedError):
-        calcular(id_claw=229, configuracion={}, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)
+        calcular(id_claw=229, configuracion={}, claw_client=None, retool_engine=None)

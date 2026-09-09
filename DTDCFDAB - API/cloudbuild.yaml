@@ -10,32 +10,33 @@ steps:
     args:
       - build
       - -t
-      - us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdcfdab-api:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdc-fda-buho-api:$COMMIT_SHA
       - .
   - name: gcr.io/cloud-builders/docker
     dir: 'DTDCFDAB - API'
     args:
       - push
-      - us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdcfdab-api:$COMMIT_SHA
+      - us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdc-fda-buho-api:$COMMIT_SHA
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     entrypoint: gcloud
     dir: 'DTDCFDAB - API'
     args:
       - run
       - deploy
-      - dtdcfdab-api
-      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdcfdab-api:$COMMIT_SHA
+      - dtdc-fda-buho-api
+      - --image=us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdc-fda-buho-api:$COMMIT_SHA
       - --region=us-central1
       - --platform=managed
-      - --service-account=sa-dtdcfdab@prod-apps-y-computo.iam.gserviceaccount.com
+      - --service-account=sa-dtdc-fda-buho@prod-apps-y-computo.iam.gserviceaccount.com
       - --network=prod-apps-vpc-temp
       - --subnet=prod-apps-subnet-temp
       - --vpc-egress=all-traffic
       - --allow-unauthenticated
-      - --set-secrets=MYSQL_HOST_DMC_GENERAL=projects/170738922754/secrets/MYSQL_HOST_DMC_GENERAL:latest,MYSQL_PORT_DMC_GENERAL=projects/170738922754/secrets/MYSQL_PORT_DMC_GENERAL:latest,MYSQL_USER_DMC_GENERAL=projects/170738922754/secrets/MYSQL_USER_DMC_GENERAL:latest,MYSQL_PASSWORD_DMC_GENERAL=projects/170738922754/secrets/MYSQL_PASSWORD_DMC_GENERAL:latest,MYSQL_DB_DMC_GENERAL=projects/170738922754/secrets/MYSQL_DB_DMC_GENERAL:latest,API_KEY_DTDCFDAB=projects/170738922754/secrets/API_KEY_DTDCFDAB:latest,RETOOL_CAMPANAS_API_KEY=projects/170738922754/secrets/RETOOL_CAMPANAS_API_KEY:latest,RETOOL_CAMPANAS_WEBHOOK_URL=projects/170738922754/secrets/RETOOL_CAMPANAS_WEBHOOK_URL:latest,CLAW_API_KEY=projects/170738922754/secrets/CLAW_API_KEY:latest,CLAW_BASE_URL_PICKS=projects/170738922754/secrets/CLAW_BASE_URL_PICKS:latest,CLAW_BASE_URL_TRACKING=projects/170738922754/secrets/CLAW_BASE_URL_TRACKING:latest
+      - --set-secrets=MYSQL_HOST_DMC_GENERAL=projects/170738922754/secrets/MYSQL_HOST_DMC_GENERAL:latest,MYSQL_PORT_DMC_GENERAL=projects/170738922754/secrets/MYSQL_PORT_DMC_GENERAL:latest,MYSQL_USER_DMC_GENERAL=projects/170738922754/secrets/MYSQL_USER_DMC_GENERAL:latest,MYSQL_PASSWORD_DMC_GENERAL=projects/170738922754/secrets/MYSQL_PASSWORD_DMC_GENERAL:latest,MYSQL_DB_DMC_GENERAL=projects/170738922754/secrets/MYSQL_DB_DMC_GENERAL:latest,API_KEY_DTDC_FDA_BUHO=projects/170738922754/secrets/API_KEY_DTDC_FDA_BUHO:latest,RETOOL_CAMPANAS_API_KEY=projects/170738922754/secrets/RETOOL_CAMPANAS_API_KEY:latest,RETOOL_CAMPANAS_WEBHOOK_URL=projects/170738922754/secrets/RETOOL_CAMPANAS_WEBHOOK_URL:latest,API_KEY_CLAW=projects/170738922754/secrets/API_KEY_CLAW:latest,API_BASE_URL_CLAW=projects/170738922754/secrets/API_BASE_URL_CLAW:latest
+      - --set-env-vars=GCP_PROJECT_ID=prod-apps-y-computo,GCP_LOCATION=us-central1,TASKS_QUEUE=dtdc-fda-buho-jobs
 
 images:
-  - us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdcfdab-api:$COMMIT_SHA
+  - us-central1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/dtdc-fda-buho-api:$COMMIT_SHA
 
 options:
   logging: CLOUD_LOGGING_ONLY

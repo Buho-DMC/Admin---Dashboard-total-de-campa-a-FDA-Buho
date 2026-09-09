@@ -17,10 +17,10 @@ def require_api_key(x_api_key: str = Header(...)) -> None:
         None. No retorna nada cuando la autenticación es válida.
 
     Raises:
-        HTTPException: 401 si no hay secreto configurado en `config.API_KEY_DTDCFDAB`,
+        HTTPException: 401 si no hay secreto configurado en `config.API_KEY_DTDC_FDA_BUHO`,
             o si `x_api_key` no coincide (comparación en tiempo constante).
     """
-    if not config.API_KEY_DTDCFDAB:
+    if not config.API_KEY_DTDC_FDA_BUHO:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid API key')
-    if not secrets.compare_digest(x_api_key.encode('utf-8'), config.API_KEY_DTDCFDAB.encode('utf-8')):
+    if not secrets.compare_digest(x_api_key.encode('utf-8'), config.API_KEY_DTDC_FDA_BUHO.encode('utf-8')):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail='Invalid API key')

@@ -96,19 +96,19 @@ def test_get_ultimo_job_de_campana_sin_jobs_regresa_none(engine):
 def test_encolar_job_crea_tarea_con_headers_correctos(monkeypatch):
     monkeypatch.setattr(config, 'GCP_PROJECT_ID', 'prod-apps-y-computo')
     monkeypatch.setattr(config, 'GCP_LOCATION', 'us-central1')
-    monkeypatch.setattr(config, 'TASKS_QUEUE', 'dtdcfdab-jobs')
-    monkeypatch.setattr(config, 'API_BASE_URL_DTDCFDAB', 'https://dtdcfdab-api.example.com')
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'TASKS_QUEUE', 'dtdc-fda-buho-jobs')
+    monkeypatch.setattr(config, 'API_BASE_URL_DTDC_FDA_BUHO', 'https://dtdcfdab-api.example.com')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
 
     tasks_client = MagicMock()
-    tasks_client.queue_path.return_value = 'projects/prod-apps-y-computo/locations/us-central1/queues/dtdcfdab-jobs'
+    tasks_client.queue_path.return_value = 'projects/prod-apps-y-computo/locations/us-central1/queues/dtdc-fda-buho-jobs'
 
     encolar_job(tasks_client, id_job_ejecucion=42)
 
-    tasks_client.queue_path.assert_called_once_with('prod-apps-y-computo', 'us-central1', 'dtdcfdab-jobs')
+    tasks_client.queue_path.assert_called_once_with('prod-apps-y-computo', 'us-central1', 'dtdc-fda-buho-jobs')
     _, keyword_arguments = tasks_client.create_task.call_args
     task_request = keyword_arguments['request']
-    assert task_request['parent'] == 'projects/prod-apps-y-computo/locations/us-central1/queues/dtdcfdab-jobs'
+    assert task_request['parent'] == 'projects/prod-apps-y-computo/locations/us-central1/queues/dtdc-fda-buho-jobs'
     http_request = task_request['task']['http_request']
     assert http_request['url'] == 'https://dtdcfdab-api.example.com/jobs/42/ejecutar'
     assert http_request['headers']['X-API-Key'] == 'secreto'
@@ -143,7 +143,7 @@ def _sembrar_dependencias_de_ejecucion(engine):
 def test_ejecutar_job_marca_fallido_si_politica_d_no_esta_implementada(engine):
     id_job_ejecucion, _, _ = _sembrar_dependencias_de_ejecucion(engine)
 
-    resultado = ejecutar_job(engine, id_job_ejecucion, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)
+    resultado = ejecutar_job(engine, id_job_ejecucion, claw_client=None, retool_engine=None)
 
     assert resultado['estado'] == 'fallido'
     assert 'Politica D' in resultado['error']
@@ -157,7 +157,7 @@ def test_ejecutar_job_marca_exitoso_y_escribe_snapshot(engine, monkeypatch):
     resultado_falso_del_etl = {'numero_envios': 10, 'numero_folios': 5}
     monkeypatch.setattr(jobs_module.politica_d, 'calcular', lambda **kwargs: resultado_falso_del_etl)
 
-    resultado = ejecutar_job(engine, id_job_ejecucion, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)
+    resultado = ejecutar_job(engine, id_job_ejecucion, claw_client=None, retool_engine=None)
 
     assert resultado['estado'] == 'exitoso'
     with engine.connect() as connection:
@@ -171,4 +171,4 @@ def test_ejecutar_job_marca_exitoso_y_escribe_snapshot(engine, monkeypatch):
 
 def test_ejecutar_job_inexistente_lanza_valueerror(engine):
     with pytest.raises(ValueError):
-        ejecutar_job(engine, 999, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)
+        ejecutar_job(engine, 999, claw_client=None, retool_engine=None)

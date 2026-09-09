@@ -93,16 +93,11 @@ def post_job_ejecutar(id_job_ejecucion: int) -> dict:
         HTTPException: 404 si `id_job_ejecucion` no existe.
     """
     engine = clients.get_db_engine()
-    claw_picks_client = clients.get_claw_picks_client()
-    claw_tracking_client = clients.get_claw_tracking_client()
+    claw_client = clients.get_claw_client()
     try:
-        return jobs.ejecutar_job(
-            engine, id_job_ejecucion,
-            claw_picks_client=claw_picks_client, claw_tracking_client=claw_tracking_client, retool_engine=None,
-        )
+        return jobs.ejecutar_job(engine, id_job_ejecucion, claw_client=claw_client, retool_engine=None)
     except ValueError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
     finally:
         engine.dispose()
-        claw_picks_client.close()
-        claw_tracking_client.close()
+        claw_client.close()

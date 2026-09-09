@@ -15,7 +15,7 @@ JOB_DE_EJEMPLO = {
 
 
 def test_get_job_404(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.jobs.get_job', return_value=None):
         mock_get_db_engine.return_value.dispose = lambda: None
@@ -24,7 +24,7 @@ def test_get_job_404(monkeypatch):
 
 
 def test_get_job_ok(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.jobs.get_job', return_value=JOB_DE_EJEMPLO):
         mock_get_db_engine.return_value.dispose = lambda: None
@@ -33,13 +33,13 @@ def test_get_job_ok(monkeypatch):
 
 
 def test_get_jobs_por_lote_requiere_query_param(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     response = client.get('/jobs', headers=HEADERS)
     assert response.status_code == 400
 
 
 def test_get_jobs_por_lote_ok(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.jobs.list_jobs_por_lote', return_value=[JOB_DE_EJEMPLO]):
         mock_get_db_engine.return_value.dispose = lambda: None
@@ -49,7 +49,7 @@ def test_get_jobs_por_lote_ok(monkeypatch):
 
 
 def test_post_job_reintentar_404(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.clients.get_tasks_client'), \
          patch('src.routers.jobs.jobs.reintentar', return_value=None):
@@ -59,7 +59,7 @@ def test_post_job_reintentar_404(monkeypatch):
 
 
 def test_post_job_reintentar_ok(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     job_reintentado = {**JOB_DE_EJEMPLO, 'id_job_ejecucion': 2}
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.jobs.clients.get_tasks_client'), \
@@ -71,11 +71,10 @@ def test_post_job_reintentar_ok(monkeypatch):
 
 
 def test_post_job_ejecutar(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     job_final = {**JOB_DE_EJEMPLO, 'estado': 'fallido', 'error': 'Politica D pendiente'}
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
-         patch('src.routers.jobs.clients.get_claw_picks_client'), \
-         patch('src.routers.jobs.clients.get_claw_tracking_client'), \
+         patch('src.routers.jobs.clients.get_claw_client'), \
          patch('src.routers.jobs.jobs.ejecutar_job', return_value=job_final):
         mock_get_db_engine.return_value.dispose = lambda: None
         response = client.post('/jobs/1/ejecutar', headers=HEADERS)
@@ -84,10 +83,9 @@ def test_post_job_ejecutar(monkeypatch):
 
 
 def test_post_job_ejecutar_job_inexistente_404(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
-         patch('src.routers.jobs.clients.get_claw_picks_client'), \
-         patch('src.routers.jobs.clients.get_claw_tracking_client'), \
+         patch('src.routers.jobs.clients.get_claw_client'), \
          patch('src.routers.jobs.jobs.ejecutar_job', side_effect=ValueError('no existe')):
         mock_get_db_engine.return_value.dispose = lambda: None
         response = client.post('/jobs/999/ejecutar', headers=HEADERS)

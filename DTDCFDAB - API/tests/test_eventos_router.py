@@ -10,7 +10,7 @@ HEADERS = {'X-API-Key': 'secreto'}
 
 
 def _configurar_api_key(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
 
 
 def test_get_eventos_sin_api_key_rechaza():

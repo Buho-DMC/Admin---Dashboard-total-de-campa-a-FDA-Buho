@@ -43,30 +43,20 @@ def get_db_engine() -> Engine:
     )
 
 
-def get_claw_picks_client() -> httpx.Client:
-    """Crea un cliente HTTP para el endpoint de Pick & Pack de Claw.
+def get_claw_client() -> httpx.Client:
+    """Crea un cliente HTTP hacia la base de Claw (Pick & Pack y Entregas).
+
+    La ruta específica de cada consulta (`/campaign/picks/{id_claw}`,
+    `/distribution/tracking/{id_claw}`) la arma quien use el cliente, no este
+    factory — el host y la API key son los mismos para ambas.
 
     Returns:
         Un `httpx.Client` con el header `api-key` ya configurado y un timeout
         de 300s (el volumen de filas por campaña es grande, ver spec).
     """
     return httpx.Client(
-        base_url=config.CLAW_BASE_URL_PICKS,
-        headers={'api-key': config.CLAW_API_KEY, 'Content-Type': 'application/json'},
-        timeout=300.0,
-    )
-
-
-def get_claw_tracking_client() -> httpx.Client:
-    """Crea un cliente HTTP para el endpoint de Entregas de Claw.
-
-    Returns:
-        Un `httpx.Client` con el header `api-key` ya configurado y un timeout
-        de 300s.
-    """
-    return httpx.Client(
-        base_url=config.CLAW_BASE_URL_TRACKING,
-        headers={'api-key': config.CLAW_API_KEY, 'Content-Type': 'application/json'},
+        base_url=config.API_BASE_URL_CLAW,
+        headers={'api-key': config.API_KEY_CLAW, 'Content-Type': 'application/json'},
         timeout=300.0,
     )
 

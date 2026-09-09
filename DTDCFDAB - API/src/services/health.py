@@ -23,7 +23,7 @@ def check_claw(claw_client: httpx.Client) -> str:
     """Verifica si el endpoint base de Claw responde.
 
     Args:
-        claw_client: cliente HTTP de Claw (ver `clients.get_claw_picks_client`).
+        claw_client: cliente HTTP de Claw (ver `clients.get_claw_client`).
 
     Returns:
         `'no configurado'` si el cliente no tiene `base_url`; `'reachable'` si

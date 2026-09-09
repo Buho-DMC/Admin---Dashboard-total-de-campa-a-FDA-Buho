@@ -118,8 +118,8 @@ def encolar_job(tasks_client: tasks_v2.CloudTasksClient, id_job_ejecucion: int) 
     task_definition = {
         'http_request': {
             'http_method': tasks_v2.HttpMethod.POST,
-            'url': f'{config.API_BASE_URL_DTDCFDAB}/jobs/{id_job_ejecucion}/ejecutar',
-            'headers': {'X-API-Key': config.API_KEY_DTDCFDAB, 'Content-Type': 'application/json'},
+            'url': f'{config.API_BASE_URL_DTDC_FDA_BUHO}/jobs/{id_job_ejecucion}/ejecutar',
+            'headers': {'X-API-Key': config.API_KEY_DTDC_FDA_BUHO, 'Content-Type': 'application/json'},
             'body': b'{}',
         }
     }
@@ -151,14 +151,13 @@ def reintentar(engine: Engine, tasks_client: tasks_v2.CloudTasksClient, id_job_e
     return job_nuevo
 
 
-def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_picks_client, claw_tracking_client, retool_engine) -> dict:
+def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engine) -> dict:
     """Ejecuta el ETL real de un job: descarga fuentes, corre Política D, guarda el snapshot.
 
     Args:
         engine: engine de SQLAlchemy.
         id_job_ejecucion: id del job a ejecutar.
-        claw_picks_client: cliente HTTP de Pick & Pack.
-        claw_tracking_client: cliente HTTP de Entregas.
+        claw_client: cliente HTTP hacia Claw (ver `clients.get_claw_client`).
         retool_engine: engine hacia Retool DB.
 
     Returns:
@@ -202,8 +201,7 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_picks_client, claw_
         resultado_del_etl = politica_d.calcular(
             id_claw=id_claw,
             configuracion=dict(fila_configuracion),
-            claw_picks_client=claw_picks_client,
-            claw_tracking_client=claw_tracking_client,
+            claw_client=claw_client,
             retool_engine=retool_engine,
         )
     except Exception as error:

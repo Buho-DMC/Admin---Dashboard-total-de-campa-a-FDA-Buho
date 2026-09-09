@@ -28,7 +28,7 @@ def get_health_deep() -> HealthDeepOut:
         `HealthDeepOut` con el estado de cada dependencia externa.
     """
     engine = clients.get_db_engine()
-    claw_client = clients.get_claw_picks_client()
+    claw_client = clients.get_claw_client()
     try:
         database_status = health.check_database(engine)
         claw_status = health.check_claw(claw_client)

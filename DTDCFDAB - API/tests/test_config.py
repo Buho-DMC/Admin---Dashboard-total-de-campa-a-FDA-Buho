@@ -20,7 +20,7 @@ def test_puerto_toma_env_var(monkeypatch):
 
 
 def test_validate_env_lanza_si_falta_una_var(monkeypatch):
-    monkeypatch.delenv('API_KEY_DTDCFDAB', raising=False)
+    monkeypatch.delenv('API_KEY_DTDC_FDA_BUHO', raising=False)
     importlib.reload(config)
     with pytest.raises(RuntimeError):
         config.validate_env()

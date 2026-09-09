@@ -27,7 +27,7 @@ def _construir_snapshot_de_prueba(**overrides):
 
 
 def test_get_campana_snapshot_404_si_no_existe(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.snapshots.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.snapshots.configuracion.get_vigente', return_value={'id_configuracion': 1}), \
          patch('src.routers.snapshots.snapshots.get_snapshot', return_value=None):
@@ -37,7 +37,7 @@ def test_get_campana_snapshot_404_si_no_existe(monkeypatch):
 
 
 def test_get_campana_snapshot_ok(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.snapshots.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.snapshots.configuracion.get_vigente', return_value={'id_configuracion': 1}), \
          patch('src.routers.snapshots.snapshots.get_snapshot', return_value=_construir_snapshot_de_prueba()):
@@ -47,13 +47,13 @@ def test_get_campana_snapshot_ok(monkeypatch):
 
 
 def test_get_snapshots_vigentes_requiere_query_param(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     response = client.get('/snapshots', headers=HEADERS)
     assert response.status_code == 400
 
 
 def test_get_snapshots_vigentes_ok(monkeypatch):
-    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.snapshots.clients.get_db_engine') as mock_get_db_engine, \
          patch('src.routers.snapshots.snapshots.list_snapshots_vigentes', return_value=[_construir_snapshot_de_prueba()]):
         mock_get_db_engine.return_value.dispose = lambda: None

@@ -18,14 +18,14 @@ def test_get_db_engine_arma_url_con_los_datos_de_config(monkeypatch):
     assert engine.url.database == 'db1'
 
 
-def test_get_claw_picks_client_manda_header_api_key(monkeypatch):
-    monkeypatch.setattr(config, 'CLAW_API_KEY', 'claw-key')
-    monkeypatch.setattr(config, 'CLAW_BASE_URL_PICKS', 'https://claw.example.com/picks')
+def test_get_claw_client_manda_header_api_key(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_CLAW', 'claw-key')
+    monkeypatch.setattr(config, 'API_BASE_URL_CLAW', 'https://claw.example.com')
 
-    client = clients.get_claw_picks_client()
+    client = clients.get_claw_client()
 
     assert client.headers['api-key'] == 'claw-key'
-    assert str(client.base_url) == 'https://claw.example.com/picks/'
+    assert str(client.base_url) == 'https://claw.example.com'
     client.close()
 
 
