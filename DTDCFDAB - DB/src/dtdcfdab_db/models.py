@@ -1,0 +1,41 @@
+"""Modelos SQLAlchemy de las 6 tablas dtdcfdab_* en la base compartida dmc-general.
+
+Los nombres de tabla/columna aquí son la fuente de verdad para el esquema físico,
+pero deben coincidir exactamente con el SQL crudo que ya usa DTDCFDAB - API en
+producción (ver src/services/*.py de esa carpeta) — esta API no importa este
+paquete, tiene su propia conexión a MySQL, así que un nombre distinto aquí no
+truena en tiempo de importación: rompe en producción la primera vez que corre
+una query.
+"""
+
+from datetime import datetime
+
+from sqlalchemy import CheckConstraint, Integer, String
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    """Declarative base compartida por las 6 tablas de este paquete."""
+
+
+class Evento(Base):
+    """Catálogo de los 7 hitos FDA (manuales, no dependen de parámetros).
+
+    Agregar un milestone nuevo es un INSERT en esta tabla — el formulario de
+    alta, el Gantt y la pestaña Metodología se generan a partir de este
+    catálogo en vez de tener el nombre de cada hito hardcodeado en el código.
+    """
+
+    __tablename__ = 'dtdcfdab_evento'
+
+    id_evento: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    codigo: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    nombre: Mapped[str] = mapped_column(String(255), nullable=False)
+    origen: Mapped[str] = mapped_column(String(16), nullable=False, server_default='manual')
+    rol: Mapped[str] = mapped_column(String(16), nullable=False, server_default='hito')
+    orden: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("origen IN ('manual')", name='ck_evento_origen'),
+        CheckConstraint("rol IN ('hito')", name='ck_evento_rol'),
+    )
