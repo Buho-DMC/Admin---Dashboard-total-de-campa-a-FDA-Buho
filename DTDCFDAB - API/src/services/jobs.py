@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from src import config
-from src.services import politica_d
+from src.services import snapshot_campana
 
 COLUMNAS_JOB = (
     'id_job_ejecucion, id_campana, id_lote, id_configuracion, tipo, estado, '
@@ -167,10 +167,10 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engi
         ValueError: si `id_job_ejecucion` no existe.
 
     Note:
-        Un fallo de `politica_d.calcular` (incluido el `NotImplementedError` actual)
-        se captura y marca el job `'fallido'` con el mensaje de error — nunca se
-        propaga como excepción, para que Cloud Tasks no reintente solo (el
-        reintento es manual, ver spec §3).
+        Un fallo de `snapshot_campana.calcular_snapshot_campana` se captura y
+        marca el job `'fallido'` con el mensaje de error — nunca se propaga
+        como excepción, para que Cloud Tasks no reintente solo (el reintento
+        es manual, ver spec §3).
     """
     job_a_ejecutar = get_job(engine, id_job_ejecucion)
     if job_a_ejecutar is None:
@@ -198,7 +198,7 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engi
         ).mappings().one()
 
     try:
-        resultado_del_etl = politica_d.calcular(
+        resultado_del_etl = snapshot_campana.calcular_snapshot_campana(
             id_claw=id_claw,
             configuracion=dict(fila_configuracion),
             claw_client=claw_client,

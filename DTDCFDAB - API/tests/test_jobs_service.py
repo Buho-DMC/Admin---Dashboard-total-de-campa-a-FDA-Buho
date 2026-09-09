@@ -140,13 +140,20 @@ def _sembrar_dependencias_de_ejecucion(engine):
     return job_creado['id_job_ejecucion'], id_campana, id_configuracion
 
 
-def test_ejecutar_job_marca_fallido_si_politica_d_no_esta_implementada(engine):
+def _lanzar_error_de_claw(**kwargs):
+    raise ValueError('Claw no devolvió escaneos de Pick & Pack para id_claw=229.')
+
+
+def test_ejecutar_job_marca_fallido_si_snapshot_campana_lanza_error(engine, monkeypatch):
+    import src.services.jobs as jobs_module
+
     id_job_ejecucion, _, _ = _sembrar_dependencias_de_ejecucion(engine)
+    monkeypatch.setattr(jobs_module.snapshot_campana, 'calcular_snapshot_campana', _lanzar_error_de_claw)
 
     resultado = ejecutar_job(engine, id_job_ejecucion, claw_client=None, retool_engine=None)
 
     assert resultado['estado'] == 'fallido'
-    assert 'Politica D' in resultado['error']
+    assert 'Pick & Pack' in resultado['error']
     assert resultado['terminado_en'] is not None
 
 
@@ -155,7 +162,9 @@ def test_ejecutar_job_marca_exitoso_y_escribe_snapshot(engine, monkeypatch):
 
     id_job_ejecucion, id_campana, id_configuracion = _sembrar_dependencias_de_ejecucion(engine)
     resultado_falso_del_etl = {'numero_envios': 10, 'numero_folios': 5}
-    monkeypatch.setattr(jobs_module.politica_d, 'calcular', lambda **kwargs: resultado_falso_del_etl)
+    monkeypatch.setattr(
+        jobs_module.snapshot_campana, 'calcular_snapshot_campana', lambda **kwargs: resultado_falso_del_etl
+    )
 
     resultado = ejecutar_job(engine, id_job_ejecucion, claw_client=None, retool_engine=None)
 
