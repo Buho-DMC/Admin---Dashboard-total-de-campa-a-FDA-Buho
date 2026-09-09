@@ -116,3 +116,249 @@ def inicio_por_bloque(fechas: pd.Series, porcentaje_minimo: float, dias_de_hueco
     if bloques_validos.empty:
         return pd.Series(fechas).dropna().min(), resumen_de_bloques
     return bloques_validos['inicio'].iloc[0], resumen_de_bloques
+
+
+COLUMNAS_DIGITALES = ['fecha_arte', 'fecha_preproyecto', 'fecha_aprobacion_arte', 'fecha_aprobacion_odt']
+
+
+def regla_folios_validos(folios: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Descarta el folio '0' y los folios sin ninguna fecha digital.
+
+    Claw usa el folio '0' como marcador de "sin folio asignado" — no es una
+    campaña real y contaminaría cualquier fecha de inicio/fin si se cuenta.
+    Un folio sin ninguna fecha digital tampoco aporta nada: es un registro
+    vacío que solo existe en la base, no un evento que haya ocurrido.
+
+    Args:
+        folios: filas con al menos las columnas 'folio' y `COLUMNAS_DIGITALES`.
+
+    Returns:
+        (folios válidos, metadatos con folios_entrada, folios_folio_cero,
+        folios_sin_fecha, folios_descartados, folios_validos).
+    """
+    es_folio_cero = folios['folio'].astype(str) == '0'
+    sin_ninguna_fecha = folios[COLUMNAS_DIGITALES].isna().all(axis=1)
+    filas_invalidas = es_folio_cero | sin_ninguna_fecha
+    metadatos = {
+        'folios_entrada': int(len(folios)),
+        'folios_folio_cero': int(es_folio_cero.sum()),
+        'folios_sin_fecha': int(sin_ninguna_fecha.sum()),
+        'folios_descartados': int(filas_invalidas.sum()),
+        'folios_validos': int((~filas_invalidas).sum()),
+    }
+    return folios[~filas_invalidas].copy(), metadatos
+
+
+MINUTOS_MINIMOS_ODP = 1  # bajo este umbral, una ODP es un cierre administrativo
+
+
+def regla_odps_validas(odps: pd.DataFrame, contexto: dict) -> tuple[pd.DataFrame, dict]:
+    """Descarta ODPs instantáneas (< `MINUTOS_MINIMOS_ODP`) y reenvíos.
+
+    Una ODP (orden de producción) que dura segundos no fue trabajo de
+    impresión real — es un cierre administrativo en el sistema (alguien
+    marca la orden como terminada sin haber impreso nada). Un reenvío es una
+    ODP que arranca después de que ya se hizo Pick & Pack: es una reimpresión
+    de algo dañado o perdido en el empaque, no parte del ciclo original de
+    producción, y contarla movería la fecha de fin de Impresión más allá de
+    lo que en realidad tardó la campaña.
+
+    Args:
+        odps: filas con 'inicio_produccion' y 'fin_produccion'.
+        contexto: debe traer 'fin_pick_pack' (Timestamp o NaT) — Pick & Pack
+            se calcula ANTES que Impresión (ver ORDEN_ETAPAS).
+
+    Returns:
+        (odps válidas, metadatos con los conteos de cada motivo de descarte).
+
+    Raises:
+        ValueError: si 'fin_pick_pack' no está en `contexto` — bug de orden
+            de ejecución, nunca debería pasar en producción.
+    """
+    if 'fin_pick_pack' not in contexto:
+        raise ValueError(
+            'regla_odps_validas necesita el Fin de Pick & Pack ya calculado. '
+            'Pick & Pack debe ejecutarse antes que Impresión (ver ORDEN_ETAPAS).'
+        )
+    fin_pick_pack = contexto['fin_pick_pack']
+
+    sin_inicio = odps['inicio_produccion'].isna()
+    sin_fin = odps['fin_produccion'].isna()
+    odps_con_fechas = odps[~(sin_inicio | sin_fin)].copy()
+
+    duracion_minutos = (odps_con_fechas['fin_produccion'] - odps_con_fechas['inicio_produccion']).dt.total_seconds() / 60
+    es_instantanea = duracion_minutos < MINUTOS_MINIMOS_ODP
+
+    sin_referencia_pick_pack = pd.isna(fin_pick_pack)
+    if sin_referencia_pick_pack:
+        es_reenvio = pd.Series(False, index=odps_con_fechas.index)
+        numero_sin_referencia_pick_pack = len(odps_con_fechas)
+    else:
+        es_reenvio = odps_con_fechas['inicio_produccion'] > fin_pick_pack
+        numero_sin_referencia_pick_pack = 0
+
+    filas_invalidas = es_instantanea | es_reenvio
+    metadatos = {
+        'odps_entrada': int(len(odps)),
+        'odps_sin_ninguna_fecha': int((sin_inicio & sin_fin).sum()),
+        'odps_media_abierta': int((sin_inicio ^ sin_fin).sum()),
+        'odps_con_fechas': int(len(odps_con_fechas)),
+        'odps_instantaneas': int(es_instantanea.sum()),
+        'odps_reenvio': int(es_reenvio.sum()),
+        'odps_sin_referencia_pick_pack': numero_sin_referencia_pick_pack,
+        'odps_validas': int((~filas_invalidas).sum()),
+    }
+    return odps_con_fechas[~filas_invalidas].copy(), metadatos
+
+
+def regla_precampana_dia_sin_operacion(registros: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Marca abiertos los registros que abarcan un día en que nadie abrió
+    ninguna actividad de esta campaña — la planta no estaba trabajando ese día.
+
+    Un registro de precampaña puede quedar abierto por error (alguien olvidó
+    cerrarlo) y arrastrar su `hora_fin` varios días, aunque la planta no
+    trabajó en la campaña esos días intermedios. Si se usara esa `hora_fin`
+    tal cual, la etapa de precampaña se vería durando días de inactividad
+    real. Esta regla no borra la fila: conserva `hora_inicio` (alguien sí
+    estuvo ahí y la abrió) y anula `hora_fin` en una columna nueva
+    `hora_fin_valida`. Sin parámetros calibrados — el día de operación sale
+    de los propios datos (AUDITORIA_ETL.txt §17.1-17.2).
+
+    Args:
+        registros: filas con 'hora_inicio' y 'hora_fin'.
+
+    Returns:
+        (registros con columnas 'abierto' y 'hora_fin_valida', metadatos con
+        registros_entrada, registros, registros_abiertos).
+    """
+    registros_con_inicio = registros.dropna(subset=['hora_inicio']).copy()
+    registros_con_inicio['abierto'] = False
+
+    dias_con_operacion = set(registros_con_inicio['hora_inicio'].dt.normalize())
+    for indice_fila, fila in registros_con_inicio.iterrows():
+        if pd.isna(fila['hora_fin']):
+            continue
+        dias_que_abarca_el_registro = pd.date_range(
+            fila['hora_inicio'].normalize(), fila['hora_fin'].normalize(), freq='D'
+        )
+        if any(dia not in dias_con_operacion for dia in dias_que_abarca_el_registro):
+            registros_con_inicio.loc[indice_fila, 'abierto'] = True
+
+    registros_con_inicio['hora_fin_valida'] = registros_con_inicio['hora_fin'].where(~registros_con_inicio['abierto'])
+
+    metadatos = {
+        'registros_entrada': int(len(registros)),
+        'registros': int(len(registros_con_inicio)),
+        'registros_abiertos': int(registros_con_inicio['abierto'].sum()),
+    }
+    return registros_con_inicio, metadatos
+
+
+def regla_rescate_entregas(envios: pd.DataFrame, contexto: dict) -> tuple[pd.DataFrame, dict]:
+    """Rellena Fecha Entrega con la última actualización + `desfase_rescate_dias`
+    cuando falta y el estatus es 'Entregado'.
+
+    La paquetería a veces marca un envío como 'Entregado' en su sistema de
+    tracking sin nunca poblar la fecha exacta de entrega — el dato existe en
+    el negocio (el paquete sí llegó) pero no en la columna que se necesita
+    para calcular la etapa de Entregas. Esta regla "rescata" esos envíos
+    usando su última actualización de tracking como aproximación, en vez de
+    perderlos del cálculo o tratarlos como si nunca hubieran llegado. No
+    borra filas: todas se conservan, con `fecha_final` poblada donde se pudo.
+    Las columnas de "última actualización" y "estatus" se detectan por
+    substring (`'ltima'`, `'statu'`), no por nombre exacto — Claw no
+    garantiza el nombre exacto de esas dos columnas.
+
+    Args:
+        envios: filas con al menos 'Fecha Entrega' y las dos columnas
+            detectadas por substring.
+        contexto: debe traer 'desfase_rescate_dias' (parámetro configurable).
+
+    Returns:
+        (envios con columna 'fecha_final', metadatos con universo,
+        con_fecha_original, rescatados, sin_fecha_entregado,
+        sin_registro_entrega, y los nombres de columna detectados).
+
+    Raises:
+        ValueError: si no se encuentran las dos columnas por substring.
+    """
+    envios_con_fecha_final = envios.copy()
+    columna_ultima_actualizacion = next(
+        (columna for columna in envios_con_fecha_final.columns if 'ltima' in columna.lower()), None
+    )
+    columna_estatus = next(
+        (columna for columna in envios_con_fecha_final.columns if 'statu' in columna.lower()), None
+    )
+    if columna_ultima_actualizacion is None or columna_estatus is None:
+        raise ValueError(
+            'No se encontraron las columnas de tracking (última actualización / estatus). '
+            f'Columnas disponibles: {list(envios_con_fecha_final.columns)}'
+        )
+
+    fecha_ultima_actualizacion = pd.to_datetime(envios_con_fecha_final[columna_ultima_actualizacion], errors='coerce')
+    fecha_entrega = pd.to_datetime(envios_con_fecha_final['Fecha Entrega'], errors='coerce')
+    es_rescatable = (
+        fecha_entrega.isna()
+        & fecha_ultima_actualizacion.notna()
+        & (envios_con_fecha_final[columna_estatus].astype(str) == 'Entregado')
+    )
+
+    envios_con_fecha_final['fecha_final'] = fecha_entrega
+    envios_con_fecha_final.loc[es_rescatable, 'fecha_final'] = (
+        fecha_ultima_actualizacion[es_rescatable] + pd.Timedelta(days=contexto['desfase_rescate_dias'])
+    )
+
+    es_entregado = envios_con_fecha_final[columna_estatus].astype(str) == 'Entregado'
+    sin_fecha_final = envios_con_fecha_final['fecha_final'].isna()
+    sin_fecha_entregado = sin_fecha_final & es_entregado
+    sin_registro_de_entrega = ~es_entregado
+
+    metadatos = {
+        'columna_ultima_actualizacion': columna_ultima_actualizacion,
+        'columna_estatus': columna_estatus,
+        'universo': int(len(envios_con_fecha_final)),
+        'con_fecha_original': int(fecha_entrega.notna().sum()),
+        'rescatados': int(es_rescatable.sum()),
+        'sin_fecha_entregado': int(sin_fecha_entregado.sum()),
+        'sin_registro_entrega': int(sin_registro_de_entrega.sum()),
+    }
+    return envios_con_fecha_final, metadatos
+
+
+def regla_ciclo_folio_valido(folios: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """Descarta folios con algún tramo negativo, para los KPIs de ciclo.
+
+    Los KPIs de ciclo miden cuánto tarda Buho y cuánto tarda FDA en responder
+    dentro del flujo de un folio. Un tramo negativo (por ejemplo, la
+    aprobación registrada antes que el arte) es un error de captura en
+    Claw, no un ciclo real — incluirlo metería una duración negativa que
+    distorsionaría la mediana de todo el KPI. La aprobación de un folio es
+    la MÁS TARDÍA de arte y ODT.
+
+    Args:
+        folios: filas con 'fecha_arte', 'fecha_preproyecto',
+            'fecha_aprobacion_arte', 'fecha_aprobacion_odt'.
+
+    Returns:
+        (folios con ciclo válido, metadatos con folios_entrada,
+        folios_invertidos, folios_validos).
+    """
+    aprobacion_mas_tardia = folios[['fecha_aprobacion_arte', 'fecha_aprobacion_odt']].max(axis=1)
+    duracion_buho_segundos = (folios['fecha_preproyecto'] - folios['fecha_arte']).dt.total_seconds()
+    duracion_fda_segundos = (aprobacion_mas_tardia - folios['fecha_preproyecto']).dt.total_seconds()
+    folios_invertidos = (duracion_buho_segundos < 0) | (duracion_fda_segundos < 0)
+
+    metadatos = {
+        'folios_entrada': int(len(folios)),
+        'folios_invertidos': int(folios_invertidos.sum()),
+        'folios_validos': int((~folios_invertidos).sum()),
+    }
+    return folios[~folios_invertidos].copy(), metadatos
+
+
+REGLAS_DISPONIBLES = {
+    'folios_validos':                lambda datos, contexto: regla_folios_validos(datos),
+    'odps_validas':                  lambda datos, contexto: regla_odps_validas(datos, contexto),
+    'precampana_dia_sin_operacion':  lambda datos, contexto: regla_precampana_dia_sin_operacion(datos),
+    'rescate_entregas':              lambda datos, contexto: regla_rescate_entregas(datos, contexto),
+}
