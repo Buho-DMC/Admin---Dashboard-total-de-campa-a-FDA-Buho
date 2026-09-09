@@ -685,3 +685,39 @@ def calcular_etapas(
         if nombre_etapa == 'pick_pack':
             contexto['fin_pick_pack'] = resultados['pick_pack']['fin']
     return resultados, metadatos
+
+
+def calcular_kpis_ciclo_folio(folios_digitales: pd.DataFrame) -> dict:
+    """Respuesta Buho (arte -> preproyecto) y Respuesta FDA (preproyecto -> aprobación).
+
+    Estos dos KPIs miden, por separado, cuánto tarda cada lado del proceso en
+    responder dentro del ciclo de un folio: Buho (subir el preproyecto una
+    vez que tiene el arte) y FDA (aprobar una vez que tiene el preproyecto).
+    Se reportan como mediana de días — no promedio — para no dejar que un
+    folio con una demora atípica (una aprobación que tardó semanas) mueva el
+    número que ve el equipo cada campaña.
+
+    Args:
+        folios_digitales: el DataFrame crudo de retool_digital (se deduplica
+            por (id_claw, folio) aquí mismo).
+
+    Returns:
+        {'respuesta_buho_mediana_dias', 'respuesta_fda_mediana_dias', 'folios_invertidos'}
+    """
+    folios_unicos = folios_digitales.drop_duplicates(subset=['id_claw', 'folio'])
+    folios_validos, _ = regla_folios_validos(folios_unicos)
+    folios_con_ciclo_valido, metadatos_ciclo = regla_ciclo_folio_valido(folios_validos)
+
+    aprobacion_mas_tardia = folios_con_ciclo_valido[['fecha_aprobacion_arte', 'fecha_aprobacion_odt']].max(axis=1)
+    dias_buho = (
+        folios_con_ciclo_valido['fecha_preproyecto'] - folios_con_ciclo_valido['fecha_arte']
+    ).dt.total_seconds() / 86400
+    dias_fda = (
+        aprobacion_mas_tardia - folios_con_ciclo_valido['fecha_preproyecto']
+    ).dt.total_seconds() / 86400
+
+    return {
+        'respuesta_buho_mediana_dias': round(dias_buho.median(), 2) if len(dias_buho) else float('nan'),
+        'respuesta_fda_mediana_dias': round(dias_fda.median(), 2) if len(dias_fda) else float('nan'),
+        'folios_invertidos': metadatos_ciclo['folios_invertidos'],
+    }

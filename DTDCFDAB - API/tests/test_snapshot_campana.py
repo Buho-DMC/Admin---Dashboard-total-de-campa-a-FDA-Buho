@@ -10,6 +10,7 @@ from src.services.snapshot_campana import (
     bloques_de_actividad,
     calcular_etapa,
     calcular_etapas,
+    calcular_kpis_ciclo_folio,
     inicio_por_bloque,
     punto_de_avance,
     regla_ciclo_folio_valido,
@@ -347,3 +348,20 @@ def test_calcular_etapas_pasa_el_fin_de_pick_pack_a_impresion_para_descartar_ree
     assert resultados['impresion']['numero_unidades_total'] == 2
     assert resultados['artes']['inicio'] == pd.Timestamp('2026-01-01')
     assert resultados['artes']['fin'] == pd.Timestamp('2026-01-02')
+
+
+def test_calcular_kpis_ciclo_folio_calcula_medianas_de_respuesta_buho_y_fda():
+    folios_digitales = pd.DataFrame({
+        'id_claw': [229, 229],
+        'folio': ['A1', 'A2'],
+        'fecha_arte': pd.to_datetime(['2026-01-01', '2026-01-02']),
+        'fecha_preproyecto': pd.to_datetime(['2026-01-02', '2026-01-03']),
+        'fecha_aprobacion_arte': pd.to_datetime(['2026-01-03', '2026-01-05']),
+        'fecha_aprobacion_odt': pd.to_datetime(['2026-01-04', '2026-01-04']),
+    })
+
+    kpis = calcular_kpis_ciclo_folio(folios_digitales)
+
+    assert kpis['respuesta_buho_mediana_dias'] == pytest.approx(1.0)
+    assert kpis['respuesta_fda_mediana_dias'] == pytest.approx(2.0)
+    assert kpis['folios_invertidos'] == 0
