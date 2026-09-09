@@ -15,6 +15,11 @@ import pandas as pd
 def punto_de_avance(eventos: pd.Series, porcentaje: float, numero_denominador: int | None = None) -> pd.Timestamp:
     """Fecha en que se alcanzó `porcentaje` de las unidades con fecha.
 
+    Responde preguntas como "¿cuándo se entregó el 90% de los envíos?" sin
+    interpolar entre dos fechas: el hito de un porcentaje siempre es un
+    evento real que de verdad ocurrió, nunca un promedio inventado entre el
+    envío 89 y el 90.
+
     Args:
         eventos: fechas, una por unidad con registro.
         porcentaje: 0-1.
@@ -41,6 +46,16 @@ def punto_de_avance(eventos: pd.Series, porcentaje: float, numero_denominador: i
 
 def bloques_de_actividad(fechas: pd.Series, dias_de_hueco: int) -> tuple[pd.Series, pd.DataFrame]:
     """Agrupa eventos en bloques separados por huecos sin actividad.
+
+    Sirve para distinguir una racha real de trabajo de un evento aislado. Por
+    ejemplo, en Carga de Artes alguien puede subir un arte de prueba el día 1
+    y no volver a tocar la campaña hasta el día 10, cuando empieza la carga
+    real de 40 artes: sin esta función, el rango completo (día 1 al último
+    arte) infla la duración de la etapa con 9 días de hueco que no fueron
+    trabajo. Esta función detecta ese hueco y separa los eventos en bloques
+    (racha 1: 1 evento del día 1; racha 2: 40 eventos desde el día 10), para
+    que otras funciones (como `inicio_por_bloque`) decidan cuál racha es la
+    real.
 
     Args:
         fechas: eventos crudos, con o sin duplicados.
@@ -72,8 +87,14 @@ def bloques_de_actividad(fechas: pd.Series, dias_de_hueco: int) -> tuple[pd.Seri
 def inicio_por_bloque(fechas: pd.Series, porcentaje_minimo: float, dias_de_hueco: int) -> tuple[pd.Timestamp, pd.DataFrame]:
     """Primer evento del primer bloque que pesa >= `porcentaje_minimo` del volumen total.
 
-    Solo se usa para el INICIO de una etapa: al final, un bloque chico es la
-    cola de cierre (trabajo real), no ruido — no se aplica ahí.
+    Es el método que usa el cálculo de una etapa para fijar su fecha de
+    INICIO cuando la actividad no es continua. Usa `bloques_de_actividad`
+    para separar rachas y descarta las que son demasiado chicas para contar
+    como el arranque real (por ejemplo, un solo arte de prueba subido días
+    antes de que el equipo empiece a trabajar la campaña de verdad). Solo se
+    aplica al INICIO: al final de una etapa, un bloque chico sí es real (la
+    cola de cierre, gente terminando lo último), así que ahí no se descarta
+    nada.
 
     Args:
         fechas: eventos crudos.
