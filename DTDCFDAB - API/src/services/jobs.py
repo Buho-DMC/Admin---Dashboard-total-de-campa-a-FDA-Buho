@@ -1,10 +1,13 @@
 """Ciclo de vida de los jobs de ETL: crear, consultar, encolar y reintentar."""
 
+from datetime import datetime, timezone
+
 from google.cloud import tasks_v2
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
 from src import config
+from src.services import politica_d
 
 COLUMNAS_JOB = (
     'id_job_ejecucion, id_campana, id_lote, id_configuracion, tipo, estado, '
@@ -146,3 +149,94 @@ def reintentar(engine: Engine, tasks_client: tasks_v2.CloudTasksClient, id_job_e
     )
     encolar_job(tasks_client, job_nuevo['id_job_ejecucion'])
     return job_nuevo
+
+
+def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_picks_client, claw_tracking_client, retool_engine) -> dict:
+    """Ejecuta el ETL real de un job: descarga fuentes, corre Política D, guarda el snapshot.
+
+    Args:
+        engine: engine de SQLAlchemy.
+        id_job_ejecucion: id del job a ejecutar.
+        claw_picks_client: cliente HTTP de Pick & Pack.
+        claw_tracking_client: cliente HTTP de Entregas.
+        retool_engine: engine hacia Retool DB.
+
+    Returns:
+        Dict con el job en su estado final (`'exitoso'` o `'fallido'`).
+
+    Raises:
+        ValueError: si `id_job_ejecucion` no existe.
+
+    Note:
+        Un fallo de `politica_d.calcular` (incluido el `NotImplementedError` actual)
+        se captura y marca el job `'fallido'` con el mensaje de error — nunca se
+        propaga como excepción, para que Cloud Tasks no reintente solo (el
+        reintento es manual, ver spec §3).
+    """
+    job_a_ejecutar = get_job(engine, id_job_ejecucion)
+    if job_a_ejecutar is None:
+        raise ValueError(f'Job no encontrado: {id_job_ejecucion}')
+
+    ahora = datetime.now(timezone.utc)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE dtdcfdab_job_ejecucion SET estado = 'corriendo', iniciado_en = :ahora "
+                'WHERE id_job_ejecucion = :id_job_ejecucion'
+            ),
+            {'ahora': ahora, 'id_job_ejecucion': id_job_ejecucion},
+        )
+        id_claw = connection.execute(
+            text('SELECT id_claw FROM dtdcfdab_campana WHERE id_campana = :id_campana'),
+            {'id_campana': job_a_ejecutar['id_campana']},
+        ).scalar_one()
+        fila_configuracion = connection.execute(
+            text(
+                'SELECT porcentaje_fin, porcentaje_inicio, porcentaje_bloque_minimo, hueco_entregas_dias, '
+                'desfase_rescate_dias, cobertura_aviso FROM dtdcfdab_configuracion WHERE id_configuracion = :id_configuracion'
+            ),
+            {'id_configuracion': job_a_ejecutar['id_configuracion']},
+        ).mappings().one()
+
+    try:
+        resultado_del_etl = politica_d.calcular(
+            id_claw=id_claw,
+            configuracion=dict(fila_configuracion),
+            claw_picks_client=claw_picks_client,
+            claw_tracking_client=claw_tracking_client,
+            retool_engine=retool_engine,
+        )
+    except Exception as error:
+        terminado_en = datetime.now(timezone.utc)
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    "UPDATE dtdcfdab_job_ejecucion SET estado = 'fallido', terminado_en = :terminado_en, "
+                    'error = :error WHERE id_job_ejecucion = :id_job_ejecucion'
+                ),
+                {'terminado_en': terminado_en, 'error': str(error), 'id_job_ejecucion': id_job_ejecucion},
+            )
+        return get_job(engine, id_job_ejecucion)
+
+    terminado_en = datetime.now(timezone.utc)
+    columnas_del_resultado = ', '.join(resultado_del_etl.keys())
+    placeholders_del_resultado = ', '.join(f':{nombre_columna}' for nombre_columna in resultado_del_etl.keys())
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
+                f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en)'
+            ),
+            {
+                'id_campana': job_a_ejecutar['id_campana'], 'id_configuracion': job_a_ejecutar['id_configuracion'],
+                'calculado_en': terminado_en, **resultado_del_etl,
+            },
+        )
+        connection.execute(
+            text(
+                "UPDATE dtdcfdab_job_ejecucion SET estado = 'exitoso', terminado_en = :terminado_en "
+                'WHERE id_job_ejecucion = :id_job_ejecucion'
+            ),
+            {'terminado_en': terminado_en, 'id_job_ejecucion': id_job_ejecucion},
+        )
+    return get_job(engine, id_job_ejecucion)

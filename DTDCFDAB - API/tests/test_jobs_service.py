@@ -1,10 +1,12 @@
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy import text
 
 from src import config
 from src.services.jobs import (
     crear_job,
+    ejecutar_job,
     encolar_job,
     get_job,
     get_ultimo_job_de_campana,
@@ -130,3 +132,43 @@ def test_reintentar_crea_nuevo_job_y_encola(engine):
 def test_reintentar_job_inexistente_regresa_none(engine):
     tasks_client = MagicMock()
     assert reintentar(engine, tasks_client, 999) is None
+
+
+def _sembrar_dependencias_de_ejecucion(engine):
+    id_campana, id_configuracion = _sembrar_campana_y_configuracion(engine)
+    job_creado = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    return job_creado['id_job_ejecucion'], id_campana, id_configuracion
+
+
+def test_ejecutar_job_marca_fallido_si_politica_d_no_esta_implementada(engine):
+    id_job_ejecucion, _, _ = _sembrar_dependencias_de_ejecucion(engine)
+
+    resultado = ejecutar_job(engine, id_job_ejecucion, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)
+
+    assert resultado['estado'] == 'fallido'
+    assert 'Politica D' in resultado['error']
+    assert resultado['terminado_en'] is not None
+
+
+def test_ejecutar_job_marca_exitoso_y_escribe_snapshot(engine, monkeypatch):
+    import src.services.jobs as jobs_module
+
+    id_job_ejecucion, id_campana, id_configuracion = _sembrar_dependencias_de_ejecucion(engine)
+    resultado_falso_del_etl = {'numero_envios': 10, 'numero_folios': 5}
+    monkeypatch.setattr(jobs_module.politica_d, 'calcular', lambda **kwargs: resultado_falso_del_etl)
+
+    resultado = ejecutar_job(engine, id_job_ejecucion, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)
+
+    assert resultado['estado'] == 'exitoso'
+    with engine.connect() as connection:
+        fila_del_snapshot = connection.execute(
+            text('SELECT numero_envios, numero_folios FROM dtdcfdab_campana_snapshot WHERE id_campana = :id_campana'),
+            {'id_campana': id_campana},
+        ).mappings().one()
+    assert fila_del_snapshot['numero_envios'] == 10
+    assert fila_del_snapshot['numero_folios'] == 5
+
+
+def test_ejecutar_job_inexistente_lanza_valueerror(engine):
+    with pytest.raises(ValueError):
+        ejecutar_job(engine, 999, claw_picks_client=None, claw_tracking_client=None, retool_engine=None)

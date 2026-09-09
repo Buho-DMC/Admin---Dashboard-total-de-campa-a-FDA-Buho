@@ -77,3 +77,32 @@ def post_job_reintentar(id_job_ejecucion: int) -> dict:
     if job_reintentado is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Job no encontrado')
     return job_reintentado
+
+
+@router.post('/jobs/{id_job_ejecucion}/ejecutar', response_model=JobOut)
+def post_job_ejecutar(id_job_ejecucion: int) -> dict:
+    """Ejecuta el ETL real de un job. Endpoint interno — solo lo invoca Cloud Tasks.
+
+    Args:
+        id_job_ejecucion: id del job a ejecutar.
+
+    Returns:
+        `JobOut` en su estado final (`'exitoso'` o `'fallido'`).
+
+    Raises:
+        HTTPException: 404 si `id_job_ejecucion` no existe.
+    """
+    engine = clients.get_db_engine()
+    claw_picks_client = clients.get_claw_picks_client()
+    claw_tracking_client = clients.get_claw_tracking_client()
+    try:
+        return jobs.ejecutar_job(
+            engine, id_job_ejecucion,
+            claw_picks_client=claw_picks_client, claw_tracking_client=claw_tracking_client, retool_engine=None,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+    finally:
+        engine.dispose()
+        claw_picks_client.close()
+        claw_tracking_client.close()
