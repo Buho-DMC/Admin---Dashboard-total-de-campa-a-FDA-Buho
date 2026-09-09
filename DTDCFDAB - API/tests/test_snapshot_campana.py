@@ -6,8 +6,10 @@ import pytest
 from src.services.snapshot_campana import (
     _calcular_extremo,
     _configuracion_del_extremo,
+    _construir_configuracion_etapas,
     bloques_de_actividad,
     calcular_etapa,
+    calcular_etapas,
     inicio_por_bloque,
     punto_de_avance,
     regla_ciclo_folio_valido,
@@ -16,6 +18,11 @@ from src.services.snapshot_campana import (
     regla_precampana_dia_sin_operacion,
     regla_rescate_entregas,
 )
+
+CONFIGURACION_DE_EJEMPLO = {
+    'porcentaje_fin': 0.99, 'porcentaje_inicio': 0.01, 'porcentaje_bloque_minimo': 0.05,
+    'hueco_entregas_dias': 10, 'desfase_rescate_dias': 0.622, 'cobertura_aviso': 0.95,
+}
 
 
 def test_punto_de_avance_devuelve_el_evento_en_la_posicion_exacta():
@@ -281,3 +288,62 @@ def test_calcular_etapa_regla_desconocida_lanza_keyerror():
 
     with pytest.raises(KeyError):
         calcular_etapa('artes', configuracion_etapa, datos_fuente)
+
+
+def test_construir_configuracion_etapas_sustituye_los_parametros_configurables():
+    configuracion_etapas = _construir_configuracion_etapas(CONFIGURACION_DE_EJEMPLO)
+
+    assert set(configuracion_etapas.keys()) == {
+        'artes', 'preproyectos', 'aprobaciones', 'impresion', 'precampana', 'pick_pack', 'entregas',
+    }
+    assert configuracion_etapas['pick_pack']['inicio']['porcentaje_minimo'] == 0.05
+    assert configuracion_etapas['pick_pack']['fin']['porcentaje'] == 0.99
+    assert configuracion_etapas['entregas']['inicio']['porcentaje'] == 0.01
+    assert configuracion_etapas['entregas']['fin']['dias_de_hueco'] == 10
+
+
+def _fuentes_de_campana_de_ejemplo():
+    retool_digital = pd.DataFrame({
+        'id_claw': [229, 229],
+        'folio': ['A1', 'A2'],
+        'fecha_arte': pd.to_datetime(['2026-01-01', '2026-01-02']),
+        'fecha_preproyecto': pd.to_datetime(['2026-01-02', '2026-01-03']),
+        'fecha_aprobacion_arte': pd.to_datetime(['2026-01-03', '2026-01-05']),
+        'fecha_aprobacion_odt': pd.to_datetime(['2026-01-04', '2026-01-04']),
+        'inicio_produccion': pd.to_datetime(['2026-01-05 08:00', '2026-01-06 08:00']),
+        'fin_produccion': pd.to_datetime(['2026-01-05 08:10', '2026-01-06 08:05']),
+    })
+    retool_precampana = pd.DataFrame({
+        'id_claw': [229, 229],
+        'hora_inicio': pd.to_datetime(['2026-01-01 08:00', '2026-01-02 10:00']),
+        'hora_fin': pd.to_datetime(['2026-01-01 09:00', '2026-01-02 11:00']),
+    })
+    claw_picks = pd.DataFrame({
+        'box_id': [1, 1, 1, 2, 2],
+        'time': pd.to_datetime([
+            '2026-01-10 08:00', '2026-01-10 08:10', '2026-01-10 08:20',
+            '2026-01-10 09:00', '2026-01-10 09:15',
+        ]),
+    })
+    claw_tracking = pd.DataFrame({
+        'Fecha Entrega': [pd.Timestamp('2026-01-15'), pd.NaT, pd.NaT],
+        'Fecha Última Actualización': [pd.NaT, pd.Timestamp('2026-01-16'), pd.NaT],
+        'Estatus': ['Entregado', 'Entregado', 'En transito'],
+    })
+    return {
+        'retool_digital': retool_digital, 'retool_precampana': retool_precampana,
+        'claw_picks': claw_picks, 'claw_tracking': claw_tracking,
+    }
+
+
+def test_calcular_etapas_pasa_el_fin_de_pick_pack_a_impresion_para_descartar_reenvios():
+    fuentes = _fuentes_de_campana_de_ejemplo()
+    configuracion_etapas = _construir_configuracion_etapas(CONFIGURACION_DE_EJEMPLO)
+    contexto_inicial = {'desfase_rescate_dias': CONFIGURACION_DE_EJEMPLO['desfase_rescate_dias']}
+
+    resultados, metadatos = calcular_etapas(fuentes, configuracion_etapas, contexto_inicial)
+
+    assert resultados['pick_pack']['fin'] == pd.Timestamp('2026-01-10 09:15')
+    assert resultados['impresion']['numero_unidades_total'] == 2
+    assert resultados['artes']['inicio'] == pd.Timestamp('2026-01-01')
+    assert resultados['artes']['fin'] == pd.Timestamp('2026-01-02')

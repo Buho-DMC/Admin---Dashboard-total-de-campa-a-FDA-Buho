@@ -572,3 +572,116 @@ def calcular_etapa(
         **resultado_fin['extras'],
     }
     return resultado_etapa, metadatos_de_reglas
+
+
+DIAS_DE_HUECO_PICK_PACK = 2  # separa bloques de escaneo al INICIO de Pick & Pack
+
+
+def _construir_configuracion_etapas(configuracion: dict) -> dict:
+    """Arma la configuración de las 7 etapas con los parámetros de esta corrida.
+
+    Cada campaña usa sus propios porcentajes/huecos (guardados en
+    `dtdcfdab_configuracion`), así que la configuración de etapas no puede
+    ser una constante fija en el módulo — esta función la reconstruye por
+    corrida, sustituyendo esos 6 parámetros en la plantilla de las 7 etapas.
+
+    Args:
+        configuracion: dict con las 6 llaves de `dtdcfdab_configuracion`
+            (porcentaje_fin, porcentaje_inicio, porcentaje_bloque_minimo,
+            hueco_entregas_dias, desfase_rescate_dias, cobertura_aviso).
+
+    Returns:
+        El dict de las 7 etapas, con los porcentajes/huecos de esta corrida
+        ya sustituidos. `DIAS_DE_HUECO_PICK_PACK` y `MINUTOS_MINIMOS_ODP` no
+        entran aquí: no son configurables (AUDITORIA_ETL.txt §18.9).
+    """
+    return {
+        'artes': {
+            'unidad': 'folio', 'fuente': 'retool_digital', 'evento': ['fecha_arte'],
+            'deduplicar_por': ['id_claw', 'folio'], 'reglas': ['folios_validos'],
+            'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+        },
+        'preproyectos': {
+            'unidad': 'folio', 'fuente': 'retool_digital', 'evento': ['fecha_preproyecto'],
+            'deduplicar_por': ['id_claw', 'folio'], 'reglas': ['folios_validos'],
+            'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+        },
+        'aprobaciones': {
+            'unidad': 'folio', 'fuente': 'retool_digital',
+            'evento': ['fecha_aprobacion_arte', 'fecha_aprobacion_odt'],
+            'deduplicar_por': ['id_claw', 'folio'], 'reglas': ['folios_validos'],
+            'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+        },
+        'impresion': {
+            'unidad': 'odp', 'fuente': 'retool_digital', 'evento': ['inicio_produccion', 'fin_produccion'],
+            'reglas': ['odps_validas'],
+            'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+        },
+        'precampana': {
+            'unidad': 'actividad', 'fuente': 'retool_precampana', 'evento': ['hora_inicio', 'hora_fin_valida'],
+            'reglas': ['precampana_dia_sin_operacion'],
+            'inicio': {'metodo': 'primero'}, 'fin': {'metodo': 'ultimo'},
+        },
+        'pick_pack': {
+            'unidad': 'caja', 'fuente': 'claw_picks',
+            'inicio': {
+                'unidad': 'escaneo', 'metodo': 'bloque', 'evento': ['time'],
+                'porcentaje_minimo': configuracion['porcentaje_bloque_minimo'],
+                'dias_de_hueco': DIAS_DE_HUECO_PICK_PACK,
+            },
+            'fin': {
+                'unidad': 'caja', 'metodo': 'avance', 'porcentaje': configuracion['porcentaje_fin'],
+                'evento_por_unidad': ('box_id', 'time', 'max'), 'desde': 'inicio',
+            },
+        },
+        'entregas': {
+            'unidad': 'envio', 'fuente': 'claw_tracking', 'reglas': ['rescate_entregas'],
+            'evento_por_unidad': (None, 'fecha_final', None),
+            'inicio': {'metodo': 'avance', 'porcentaje': configuracion['porcentaje_inicio']},
+            'fin': {'metodo': 'bloque_final', 'dias_de_hueco': configuracion['hueco_entregas_dias']},
+        },
+    }
+
+
+ORDEN_ETAPAS = ['pick_pack', 'impresion', 'artes', 'preproyectos', 'aprobaciones', 'precampana', 'entregas']
+
+
+def calcular_etapas(
+    fuentes: dict[str, pd.DataFrame], configuracion_etapas: dict, contexto_inicial: dict | None = None
+) -> tuple[dict, dict]:
+    """Corre las 7 etapas en `ORDEN_ETAPAS` (Pick & Pack antes que Impresión).
+
+    Es el punto de entrada del cálculo completo de una campaña: recibe los 4
+    DataFrames crudos ya filtrados a esa campaña y regresa el resultado de
+    las 7 etapas. El orden importa — Pick & Pack se calcula primero para que
+    su fecha de fin esté disponible como referencia al calcular Impresión
+    (`regla_odps_validas` la necesita para descartar reenvíos), aunque
+    Impresión ocurre antes que Pick & Pack en el flujo real de la campaña.
+
+    Args:
+        fuentes: {nombre_de_fuente: DataFrame} — las llaves que usa
+            `configuracion_etapas[etapa]['fuente']`.
+        configuracion_etapas: el dict de 7 etapas (ver
+            `_construir_configuracion_etapas`).
+        contexto_inicial: parámetros de reglas que no dependen de otra etapa
+            (hoy, 'desfase_rescate_dias').
+
+    Returns:
+        (resultados: {etapa: resultado_etapa}, metadatos: {etapa: metadatos_de_reglas})
+
+    Raises:
+        KeyError: si falta la fuente que una etapa necesita.
+    """
+    contexto = dict(contexto_inicial or {})
+    resultados, metadatos = {}, {}
+    for nombre_etapa in ORDEN_ETAPAS:
+        configuracion_etapa = configuracion_etapas[nombre_etapa]
+        nombre_fuente = configuracion_etapa['fuente']
+        if nombre_fuente not in fuentes:
+            raise KeyError(f'etapa {nombre_etapa!r}: falta la fuente {nombre_fuente!r}')
+        resultados[nombre_etapa], metadatos[nombre_etapa] = calcular_etapa(
+            nombre_etapa, configuracion_etapa, fuentes[nombre_fuente], contexto
+        )
+        if nombre_etapa == 'pick_pack':
+            contexto['fin_pick_pack'] = resultados['pick_pack']['fin']
+    return resultados, metadatos
