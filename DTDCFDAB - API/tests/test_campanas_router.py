@@ -101,3 +101,26 @@ def test_put_campanas_evento_desconocido_400(monkeypatch):
             '/campanas/1/eventos/no_existe', headers=HEADERS, json={'fecha': '2026-02-01T00:00:00'}
         )
     assert response.status_code == 400
+
+
+def test_get_campana_job_404(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.campanas.jobs.get_ultimo_job_de_campana', return_value=None):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.get('/campanas/1/job', headers=HEADERS)
+    assert response.status_code == 404
+
+
+def test_get_campana_job_ok(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDCFDAB', 'secreto')
+    job_de_ejemplo = {
+        'id_job_ejecucion': 1, 'id_campana': 1, 'id_lote': None, 'id_configuracion': 1, 'tipo': 'alta',
+        'estado': 'corriendo', 'iniciado_en': '2026-08-01T00:00:00', 'terminado_en': None, 'error': None,
+    }
+    with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.campanas.jobs.get_ultimo_job_de_campana', return_value=job_de_ejemplo):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.get('/campanas/1/job', headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json()['estado'] == 'corriendo'

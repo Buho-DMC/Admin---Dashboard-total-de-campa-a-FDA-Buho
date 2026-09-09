@@ -11,6 +11,7 @@ from src.models.campanas import (
     CampanaOut,
     CampanaRetoolOut,
 )
+from src.models.jobs import JobOut
 from src.security import require_api_key
 from src.services import campanas, jobs
 
@@ -146,3 +147,26 @@ def put_campana_evento(id_campana: int, codigo_evento: str, body: CampanaEventoU
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     finally:
         engine.dispose()
+
+
+@router.get('/campanas/{id_campana}/job', response_model=JobOut)
+def get_campana_job(id_campana: int) -> dict:
+    """Obtiene el job más reciente de una campaña (para bloquear la UI mientras corre).
+
+    Args:
+        id_campana: id de la campaña.
+
+    Returns:
+        `JobOut` del job más reciente.
+
+    Raises:
+        HTTPException: 404 si la campaña nunca tuvo un job.
+    """
+    engine = clients.get_db_engine()
+    try:
+        job_encontrado = jobs.get_ultimo_job_de_campana(engine, id_campana)
+    finally:
+        engine.dispose()
+    if job_encontrado is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Sin jobs para esta campana')
+    return job_encontrado
