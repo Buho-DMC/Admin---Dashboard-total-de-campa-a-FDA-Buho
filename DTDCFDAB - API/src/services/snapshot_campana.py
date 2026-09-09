@@ -9,7 +9,9 @@ un lote" a "una campaña por llamada".
 
 import math
 
+import httpx
 import pandas as pd
+from sqlalchemy import text
 
 
 def punto_de_avance(eventos: pd.Series, porcentaje: float, numero_denominador: int | None = None) -> pd.Timestamp:
@@ -721,3 +723,174 @@ def calcular_kpis_ciclo_folio(folios_digitales: pd.DataFrame) -> dict:
         'respuesta_fda_mediana_dias': round(dias_fda.median(), 2) if len(dias_fda) else float('nan'),
         'folios_invertidos': metadatos_ciclo['folios_invertidos'],
     }
+
+
+CONSULTA_RETOOL_DIGITAL = '''
+SELECT
+    kc.id_claw,
+    kp.campana,
+    kp.folio::text AS folio,
+    TO_CHAR(kp.fecha_arte             AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_arte,
+    TO_CHAR(kp.fecha_preproyecto      AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_preproyecto,
+    TO_CHAR(kp.fecha_aprobacion_arte  AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_aprobacion_arte,
+    TO_CHAR(kp.fecha_aprobacion_odt   AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_aprobacion_odt,
+    TO_CHAR(aop.fecha_inicio          AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS inicio_produccion,
+    TO_CHAR(aop.fecha_fin             AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fin_produccion
+FROM kam_preproyectos kp
+JOIN kam_campanas kc
+    ON kc.nombre_nest = kp.campana
+LEFT JOIN ap_folio_skus afs
+    ON kp.folio::text = afs.folio::text
+LEFT JOIN ap_odps ao
+    ON ao.folio_sku = afs.id
+LEFT JOIN ap_odp_procesos aop
+    ON aop.odp = ao.id
+WHERE kc.id_claw = :id_claw
+ORDER BY fin_produccion DESC NULLS LAST;
+'''
+# Cadena kam_preproyectos -> kam_campanas -> ap_folio_skus -> ap_odps -> ap_odp_procesos. Los LEFT
+# JOIN son a propósito: un folio sin ODP sigue contando para Artes, Preproyectos y Aprobaciones.
+# ZONA HORARIA: un solo AT TIME ZONE por columna — las 8 columnas son timestamptz. Aplicarlo dos
+# veces desplaza las fechas 6 horas (medido y confirmado en etl.ipynb, campaña 160).
+
+CONSULTA_RETOOL_PRECAMPANA = '''
+SELECT
+    kc.id_campana,
+    kc.id_claw,
+    kc.nombre_claw,
+    kc.nombre_nest,
+    kab.id_actividad,
+    kaa.actividad,
+    TO_CHAR(kab.hora_inicio AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS hora_inicio,
+    TO_CHAR(kab.hora_fin    AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS hora_fin
+FROM kam_campanas kc
+JOIN kam_ao_bitacora kab
+    ON kc.id_campana = kab.id_campana
+JOIN kam_ao_actividades kaa
+    ON kab.id_actividad = kaa.id_actividad
+WHERE kc.id_claw = :id_claw
+    AND kab.id_actividad NOT IN (40, 41)
+ORDER BY kab.hora_fin DESC;
+'''
+# Las actividades 40 y 41 se excluyen: no son Pre-campana.
+
+TIPOS_RETOOL_DIGITAL = {
+    'id_claw': 'int', 'campana': 'string', 'folio': 'string',
+    'fecha_arte': 'datetime', 'fecha_preproyecto': 'datetime',
+    'fecha_aprobacion_arte': 'datetime', 'fecha_aprobacion_odt': 'datetime',
+    'inicio_produccion': 'datetime', 'fin_produccion': 'datetime',
+}
+TIPOS_RETOOL_PRECAMPANA = {
+    'id_campana': 'int', 'id_claw': 'int', 'nombre_claw': 'string', 'nombre_nest': 'string',
+    'id_actividad': 'int', 'actividad': 'string', 'hora_inicio': 'datetime', 'hora_fin': 'datetime',
+}
+
+
+def _convertir_tipos_de_datos(datos: pd.DataFrame, mapeo_de_tipos: dict) -> pd.DataFrame:
+    """Convierte columnas según un mapeo {columna: tipo}.
+
+    Retool devuelve todo como texto (los `TO_CHAR` de las consultas son a
+    propósito, para no depender del driver de Postgres al parsear fechas).
+    Esta función es el punto único donde ese texto se vuelve tipo real antes
+    de que el motor de cálculo lo toque.
+
+    Args:
+        datos: DataFrame crudo, con columnas de texto.
+        mapeo_de_tipos: {nombre_columna: 'datetime' | 'int' | 'string'}.
+            Las columnas que no existan en `datos` se omiten sin error.
+
+    Returns:
+        Copia de `datos` con las columnas convertidas.
+
+    Raises:
+        ValueError: si un tipo del mapeo no es soportado.
+    """
+    datos_convertidos = datos.copy()
+    for nombre_columna, nombre_tipo in mapeo_de_tipos.items():
+        if nombre_columna not in datos_convertidos.columns:
+            continue
+        nombre_tipo = nombre_tipo.lower().strip()
+        if nombre_tipo == 'datetime':
+            datos_convertidos[nombre_columna] = pd.to_datetime(datos_convertidos[nombre_columna], errors='coerce')
+        elif nombre_tipo == 'int':
+            datos_convertidos[nombre_columna] = pd.to_numeric(
+                datos_convertidos[nombre_columna], errors='coerce'
+            ).astype('Int64')
+        elif nombre_tipo == 'string':
+            datos_convertidos[nombre_columna] = datos_convertidos[nombre_columna].astype('string')
+        else:
+            raise ValueError(f'Tipo {nombre_tipo!r} no soportado para la columna {nombre_columna!r}')
+    return datos_convertidos
+
+
+def obtener_datos_retool_digital(retool_engine, id_claw: int) -> pd.DataFrame:
+    """Trae artes, preproyectos, aprobaciones e impresión de Retool DB.
+
+    Es la primera de las cuatro fuentes crudas que alimentan el snapshot: sin
+    estos datos no hay campaña que calcular, así que a diferencia de
+    Pre-campaña (que sí puede venir vacía) esta función truena si Retool no
+    devuelve ni un folio.
+
+    Args:
+        retool_engine: engine de SQLAlchemy hacia Retool DB (Postgres).
+        id_claw: id de la campaña en Claw.
+
+    Returns:
+        DataFrame ya tipado, una fila por (folio, ODP/proceso).
+
+    Raises:
+        ValueError: si no hay ningún folio para este id_claw — la campaña no
+            hizo match por nombre en el JOIN `kam_campanas.nombre_nest =
+            kam_preproyectos.campana`, o no tiene folios cargados todavía.
+    """
+    datos = pd.read_sql_query(text(CONSULTA_RETOOL_DIGITAL), retool_engine, params={'id_claw': id_claw})
+    if datos.empty:
+        raise ValueError(f'Retool no devolvió ningún folio para id_claw={id_claw}.')
+    return _convertir_tipos_de_datos(datos, TIPOS_RETOOL_DIGITAL)
+
+
+def obtener_datos_retool_precampana(retool_engine, id_claw: int) -> pd.DataFrame:
+    """Trae la bitácora de Pre-campaña.
+
+    Args:
+        retool_engine: engine de SQLAlchemy hacia Retool DB (Postgres).
+        id_claw: id de la campaña en Claw.
+
+    Returns:
+        DataFrame ya tipado. Puede venir vacío legítimamente — no toda
+        campaña tiene registros de Pre-campaña; no es un error.
+    """
+    datos = pd.read_sql_query(text(CONSULTA_RETOOL_PRECAMPANA), retool_engine, params={'id_claw': id_claw})
+    return _convertir_tipos_de_datos(datos, TIPOS_RETOOL_PRECAMPANA)
+
+
+RUTA_CLAW_PICKS = '/campaign/picks/'
+RUTA_CLAW_TRACKING = '/distribution/tracking/'
+
+
+def obtener_datos_claw(claw_client: httpx.Client, ruta_base: str, id_claw: int) -> pd.DataFrame | None:
+    """GET a un endpoint de Claw para una campaña.
+
+    Es la contraparte de Retool: trae los escaneos de Pick & Pack o el
+    tracking de Entregas, según `ruta_base`. Claw responde de dos formas
+    según el endpoint: una lista directa (tracking) o un objeto con la llave
+    'result' (picks). Se aceptan las dos en vez de asumir un solo formato,
+    para no romper si Claw cambia de endpoint.
+
+    Args:
+        claw_client: cliente HTTP de Claw, con `base_url` y el header
+            `api-key` ya configurados (ver `clients.get_claw_client`).
+        ruta_base: `RUTA_CLAW_PICKS` o `RUTA_CLAW_TRACKING`.
+        id_claw: id de la campaña.
+
+    Returns:
+        DataFrame crudo, o `None` si no hubo registros.
+    """
+    respuesta = claw_client.get(f'{ruta_base}{id_claw}')
+    respuesta.raise_for_status()
+    datos_json = respuesta.json()
+    if isinstance(datos_json, dict):
+        datos_json = datos_json.get('result') or []
+    if not datos_json:
+        return None
+    return pd.DataFrame(datos_json)

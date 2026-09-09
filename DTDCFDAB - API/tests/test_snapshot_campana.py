@@ -1,9 +1,12 @@
 import math
 
+import httpx
 import pandas as pd
 import pytest
 
 from src.services.snapshot_campana import (
+    RUTA_CLAW_PICKS,
+    RUTA_CLAW_TRACKING,
     _calcular_extremo,
     _configuracion_del_extremo,
     _construir_configuracion_etapas,
@@ -12,6 +15,9 @@ from src.services.snapshot_campana import (
     calcular_etapas,
     calcular_kpis_ciclo_folio,
     inicio_por_bloque,
+    obtener_datos_claw,
+    obtener_datos_retool_digital,
+    obtener_datos_retool_precampana,
     punto_de_avance,
     regla_ciclo_folio_valido,
     regla_folios_validos,
@@ -365,3 +371,83 @@ def test_calcular_kpis_ciclo_folio_calcula_medianas_de_respuesta_buho_y_fda():
     assert kpis['respuesta_buho_mediana_dias'] == pytest.approx(1.0)
     assert kpis['respuesta_fda_mediana_dias'] == pytest.approx(2.0)
     assert kpis['folios_invertidos'] == 0
+
+
+def test_obtener_datos_retool_digital_filtra_por_id_claw_y_convierte_tipos(monkeypatch):
+    llamadas_capturadas = []
+
+    def read_sql_query_falso(consulta, motor, params):
+        llamadas_capturadas.append({'consulta': str(consulta), 'params': params})
+        return pd.DataFrame({
+            'id_claw': ['229'], 'campana': ['FDA AGO26-2'], 'folio': ['A1'],
+            'fecha_arte': ['2026-01-01 08:00:00'], 'fecha_preproyecto': [None],
+            'fecha_aprobacion_arte': [None], 'fecha_aprobacion_odt': [None],
+            'inicio_produccion': [None], 'fin_produccion': [None],
+        })
+
+    monkeypatch.setattr('src.services.snapshot_campana.pd.read_sql_query', read_sql_query_falso)
+
+    resultado = obtener_datos_retool_digital(retool_engine=None, id_claw=229)
+
+    assert llamadas_capturadas[0]['params'] == {'id_claw': 229}
+    assert 'kam_preproyectos' in llamadas_capturadas[0]['consulta']
+    assert resultado.iloc[0]['id_claw'] == 229
+    assert resultado.iloc[0]['fecha_arte'] == pd.Timestamp('2026-01-01 08:00:00')
+
+
+def test_obtener_datos_retool_digital_sin_folios_lanza_valueerror(monkeypatch):
+    monkeypatch.setattr(
+        'src.services.snapshot_campana.pd.read_sql_query',
+        lambda consulta, motor, params: pd.DataFrame(),
+    )
+
+    with pytest.raises(ValueError):
+        obtener_datos_retool_digital(retool_engine=None, id_claw=229)
+
+
+def test_obtener_datos_retool_precampana_puede_venir_vacia_sin_error(monkeypatch):
+    monkeypatch.setattr(
+        'src.services.snapshot_campana.pd.read_sql_query',
+        lambda consulta, motor, params: pd.DataFrame(columns=[
+            'id_campana', 'id_claw', 'nombre_claw', 'nombre_nest',
+            'id_actividad', 'actividad', 'hora_inicio', 'hora_fin',
+        ]),
+    )
+
+    resultado = obtener_datos_retool_precampana(retool_engine=None, id_claw=229)
+
+    assert resultado.empty
+
+
+def _cliente_claw_de_prueba(handler):
+    return httpx.Client(base_url='https://claw.example.com', transport=httpx.MockTransport(handler))
+
+
+def test_obtener_datos_claw_acepta_lista_directa():
+    def handler(request):
+        assert request.url.path == '/distribution/tracking/229'
+        return httpx.Response(200, json=[{'Fecha Entrega': '2026-01-15'}])
+
+    resultado = obtener_datos_claw(_cliente_claw_de_prueba(handler), RUTA_CLAW_TRACKING, 229)
+
+    assert len(resultado) == 1
+
+
+def test_obtener_datos_claw_acepta_objeto_con_result():
+    def handler(request):
+        assert request.url.path == '/campaign/picks/229'
+        return httpx.Response(200, json={'result': [{'box_id': 1, 'time': '2026-01-10 08:00:00'}]})
+
+    resultado = obtener_datos_claw(_cliente_claw_de_prueba(handler), RUTA_CLAW_PICKS, 229)
+
+    assert len(resultado) == 1
+    assert resultado.iloc[0]['box_id'] == 1
+
+
+def test_obtener_datos_claw_sin_registros_regresa_none():
+    def handler(request):
+        return httpx.Response(200, json={'result': []})
+
+    resultado = obtener_datos_claw(_cliente_claw_de_prueba(handler), RUTA_CLAW_PICKS, 229)
+
+    assert resultado is None
