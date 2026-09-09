@@ -9,8 +9,9 @@ una query.
 """
 
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, text
+from sqlalchemy import DECIMAL, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -72,3 +73,25 @@ class CampanaEvento(Base):
         server_default=text('CURRENT_TIMESTAMP'),
         server_onupdate=text('CURRENT_TIMESTAMP'),
     )
+
+
+class Configuracion(Base):
+    """Combinación de los 6 parámetros de Política D — una sola fila es_vigente=True a la vez.
+
+    `es_vigente` es global (nunca por campaña): comparar dos campañas
+    calculadas con parámetros distintos no sería válido, así que solo una
+    combinación está activa para todas las campañas al mismo tiempo.
+    """
+
+    __tablename__ = 'dtdcfdab_configuracion'
+
+    id_configuracion: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    nombre: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    porcentaje_fin: Mapped[Decimal] = mapped_column(DECIMAL(5, 4), nullable=False)
+    porcentaje_inicio: Mapped[Decimal] = mapped_column(DECIMAL(5, 4), nullable=False)
+    porcentaje_bloque_minimo: Mapped[Decimal] = mapped_column(DECIMAL(5, 4), nullable=False)
+    hueco_entregas_dias: Mapped[Decimal] = mapped_column(DECIMAL(6, 2), nullable=False)
+    desfase_rescate_dias: Mapped[Decimal] = mapped_column(DECIMAL(6, 3), nullable=False)
+    cobertura_aviso: Mapped[Decimal] = mapped_column(DECIMAL(5, 4), nullable=False)
+    es_vigente: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text('0'))
+    creado_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
