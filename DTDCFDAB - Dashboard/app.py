@@ -4,7 +4,7 @@ import streamlit as st
 
 import config
 
-st.set_page_config(page_title='DTDCFDAB - Dashboard', page_icon='📋')
+st.set_page_config(page_title='DTDCFDAB - Dashboard', page_icon='📋', layout='wide')
 
 
 def _gate_de_contrasena() -> bool:

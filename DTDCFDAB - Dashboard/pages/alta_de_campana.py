@@ -1,5 +1,7 @@
 """Alta de una campaña nueva: selector de Retool + captura de hitos FDA."""
 
+import math
+
 import streamlit as st
 
 import api_client
@@ -28,9 +30,14 @@ id_claw_seleccionado = st.selectbox(
 campana_seleccionada = campanas_por_id_claw[id_claw_seleccionado]
 
 st.subheader('Fechas de los hitos FDA')
+mitad = math.ceil(len(catalogo_eventos) / 2)
+eventos_por_columna = (catalogo_eventos[:mitad], catalogo_eventos[mitad:])
+
 fechas_por_codigo_evento = {}
-for evento in catalogo_eventos:
-    fechas_por_codigo_evento[evento['codigo']] = st.date_input(evento['nombre'], key=f"fecha_{evento['codigo']}")
+for columna, eventos_de_la_columna in zip(st.columns(2), eventos_por_columna):
+    with columna:
+        for evento in eventos_de_la_columna:
+            fechas_por_codigo_evento[evento['codigo']] = st.date_input(evento['nombre'], key=f"fecha_{evento['codigo']}")
 
 if st.button('Dar de alta'):
     milestones = [

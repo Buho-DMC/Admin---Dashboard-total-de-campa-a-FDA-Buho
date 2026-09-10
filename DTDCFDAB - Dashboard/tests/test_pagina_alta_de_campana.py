@@ -14,6 +14,11 @@ _CAMPANAS_RETOOL = [
     }
 ]
 _EVENTOS = [{'id_evento': 1, 'codigo': 'arte', 'nombre': 'Arte aprobado', 'orden': 1}]
+_EVENTOS_MULTIPLES = [
+    {'id_evento': 1, 'codigo': 'arte', 'nombre': 'Arte aprobado', 'orden': 1},
+    {'id_evento': 2, 'codigo': 'preproyecto', 'nombre': 'Preproyecto', 'orden': 2},
+    {'id_evento': 3, 'codigo': 'impresion', 'nombre': 'Impresión', 'orden': 3},
+]
 
 
 def _preparar(monkeypatch, campanas_retool=None, eventos=None):
@@ -34,6 +39,14 @@ def test_alta_de_campana_muestra_selector_y_fechas(monkeypatch):
     app_test.run()
     assert len(app_test.selectbox) == 1
     assert len(app_test.date_input) == 1
+
+
+def test_alta_de_campana_reparte_eventos_en_dos_columnas(monkeypatch):
+    _preparar(monkeypatch, eventos=_EVENTOS_MULTIPLES)
+    app_test = AppTest.from_file('pages/alta_de_campana.py')
+    app_test.run()
+    assert len(app_test.exception) == 0
+    assert len(app_test.date_input) == len(_EVENTOS_MULTIPLES)
 
 
 def test_alta_de_campana_da_de_alta_al_confirmar(monkeypatch):

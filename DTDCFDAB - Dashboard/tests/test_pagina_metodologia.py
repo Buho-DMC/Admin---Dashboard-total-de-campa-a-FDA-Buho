@@ -44,6 +44,18 @@ def test_metodologia_muestra_tres_graficas_de_percentil(monkeypatch):
     assert len(llamadas_capturadas) == 3
 
 
+def test_metodologia_explica_cada_parametro(monkeypatch):
+    # 1 expander de historial (ya existente) + 1 de justificación por cada uno
+    # de los 6 parámetros.
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('pages/metodologia.py')
+    app_test.run()
+
+    assert len(app_test.exception) == 0
+    assert len(app_test.expander) == 7
+    assert sum(1 for expander in app_test.expander if expander.label == 'Ver justificación') == 6
+
+
 def test_metodologia_boton_deshabilitado_sin_checkbox(monkeypatch):
     _preparar(monkeypatch)
     app_test = AppTest.from_file('pages/metodologia.py')
