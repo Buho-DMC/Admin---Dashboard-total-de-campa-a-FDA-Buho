@@ -10,6 +10,26 @@ from src.services import jobs
 router = APIRouter(dependencies=[Depends(require_api_key)])
 
 
+@router.get('/jobs/activos', response_model=list[JobOut])
+def get_jobs_activos() -> list[dict]:
+    """Lista los jobs en `pendiente` o `corriendo`, sin id de lote ni de job.
+
+    Declarado ANTES de `/jobs/{id_job_ejecucion}` a propósito: esa ruta no usa
+    un convertidor de tipo en el path (`{id_job_ejecucion}`, no
+    `{id_job_ejecucion:int}`), así que FastAPI la hace calzar con cualquier
+    string — incluido 'activos' — y solo después falla al validar el tipo
+    (422). Declarando este endpoint primero, el router lo intenta antes.
+
+    Returns:
+        Lista de `JobOut`, ordenada por `id_job_ejecucion` descendente.
+    """
+    engine = clients.get_db_engine()
+    try:
+        return jobs.list_jobs_activos(engine)
+    finally:
+        engine.dispose()
+
+
 @router.get('/jobs/{id_job_ejecucion}', response_model=JobOut)
 def get_job(id_job_ejecucion: int) -> dict:
     """Obtiene el estado de un job.

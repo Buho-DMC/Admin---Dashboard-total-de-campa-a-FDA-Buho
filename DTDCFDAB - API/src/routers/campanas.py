@@ -108,6 +108,25 @@ def get_campana_detalle(id_campana: int) -> dict:
     return campana_encontrada
 
 
+@router.delete('/campanas/{id_campana}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_campana(id_campana: int) -> None:
+    """Borra una campaña dada de alta, junto con sus hitos, snapshot y jobs (cascada en DB).
+
+    Args:
+        id_campana: id de la campaña a borrar.
+
+    Raises:
+        HTTPException: 404 si la campaña no existe.
+    """
+    engine = clients.get_db_engine()
+    try:
+        borrada = campanas.borrar_campana(engine, id_campana)
+    finally:
+        engine.dispose()
+    if not borrada:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Campana no encontrada')
+
+
 @router.get('/campanas/{id_campana}/eventos', response_model=list[CampanaEventoOut])
 def get_campana_eventos(id_campana: int) -> list[dict]:
     """Lista el catálogo de hitos FDA con la fecha capturada (o pendiente) de una campaña.

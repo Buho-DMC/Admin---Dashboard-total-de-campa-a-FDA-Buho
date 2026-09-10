@@ -104,6 +104,29 @@ def get_ultimo_job_de_campana(engine: Engine, id_campana: int) -> dict | None:
         return dict(job_row) if job_row else None
 
 
+def list_jobs_activos(engine: Engine) -> list[dict]:
+    """Lista los jobs en `pendiente` o `corriendo`, sin necesidad de id de lote/job.
+
+    Alimenta la vista "Activos ahora" del Dashboard, para no obligar al usuario
+    a buscar un job por id o lote cuando solo quiere ver qué está corriendo.
+
+    Args:
+        engine: engine de SQLAlchemy.
+
+    Returns:
+        Lista de dicts, ordenada por `id_job_ejecucion` descendente (más
+        reciente primero).
+    """
+    with engine.connect() as connection:
+        result_rows = connection.execute(
+            text(
+                f"SELECT {COLUMNAS_JOB} FROM dtdcfdab_job_ejecucion "
+                "WHERE estado IN ('pendiente', 'corriendo') ORDER BY id_job_ejecucion DESC"
+            )
+        )
+        return [dict(row._mapping) for row in result_rows]
+
+
 def encolar_job(tasks_client: tasks_v2.CloudTasksClient, id_job_ejecucion: int) -> None:
     """Encola una tarea de Cloud Tasks que llama de vuelta a `/jobs/{id}/ejecutar`.
 

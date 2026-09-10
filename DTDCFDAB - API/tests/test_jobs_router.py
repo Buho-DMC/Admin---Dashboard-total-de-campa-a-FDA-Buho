@@ -48,6 +48,16 @@ def test_get_jobs_por_lote_ok(monkeypatch):
     assert len(response.json()) == 1
 
 
+def test_get_jobs_activos_ok(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
+    with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.jobs.jobs.list_jobs_activos', return_value=[JOB_DE_EJEMPLO]):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.get('/jobs/activos', headers=HEADERS)
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
 def test_post_job_reintentar_404(monkeypatch):
     monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \

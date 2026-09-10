@@ -84,6 +84,24 @@ def test_get_campana_detalle_404(monkeypatch):
     assert response.status_code == 404
 
 
+def test_delete_campana_ok(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
+    with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.campanas.campanas.borrar_campana', return_value=True):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.delete('/campanas/1', headers=HEADERS)
+    assert response.status_code == 204
+
+
+def test_delete_campana_404(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
+    with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.campanas.campanas.borrar_campana', return_value=False):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.delete('/campanas/999', headers=HEADERS)
+    assert response.status_code == 404
+
+
 def test_get_campanas_eventos(monkeypatch):
     monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.campanas.clients.get_db_engine') as mock_get_db_engine, \

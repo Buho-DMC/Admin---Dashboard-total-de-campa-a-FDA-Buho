@@ -138,6 +138,28 @@ def dar_de_alta(
     return {'campana': campana_insertada, 'job': job_de_alta}
 
 
+def borrar_campana(engine: Engine, id_campana: int) -> bool:
+    """Borra una campaña dada de alta, junto con sus hitos, snapshot y jobs.
+
+    Un solo `DELETE` sobre `dtdcfdab_campana`: las FKs de
+    `dtdcfdab_campana_evento`, `dtdcfdab_campana_snapshot` y
+    `dtdcfdab_job_ejecucion` tienen `ON DELETE CASCADE` desde la migración
+    0008 de `DTDCFDAB - DB`, así que MySQL limpia esas 3 tablas solo.
+
+    Args:
+        engine: engine de SQLAlchemy.
+        id_campana: id de la campaña a borrar.
+
+    Returns:
+        `True` si la campaña existía y se borró, `False` si no existía.
+    """
+    with engine.begin() as connection:
+        resultado_del_delete = connection.execute(
+            text('DELETE FROM dtdcfdab_campana WHERE id_campana = :id_campana'), {'id_campana': id_campana}
+        )
+        return resultado_del_delete.rowcount > 0
+
+
 def list_eventos_de_campana(engine: Engine, id_campana: int) -> list[dict]:
     """Lista el catálogo completo de hitos FDA con la fecha capturada para una campaña (si existe).
 

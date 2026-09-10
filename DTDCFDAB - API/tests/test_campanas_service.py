@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from src.services.campanas import (
+    borrar_campana,
     dar_de_alta,
     get_campana,
     list_campanas,
@@ -153,6 +154,25 @@ def test_get_campana_encontrada(engine):
     campana_de_prueba = list_campanas(engine)[0]
 
     assert get_campana(engine, campana_de_prueba['id_campana'])['id_claw'] == 1
+
+
+def test_borrar_campana_elimina_la_fila(engine):
+    # La cascada hacia hitos/snapshot/job (ON DELETE CASCADE en MySQL) ya se
+    # verificó en vivo contra dmc-general — DTDCFDAB - DB/tests/test_campana.py.
+    # El SQLite in-memory de este archivo no declara FKs, así que aquí solo se
+    # prueba que borrar_campana emite el DELETE correcto sobre la campaña.
+    _sembrar_configuracion_vigente(engine)
+    dar_de_alta(engine, id_claw=1, cliente='FDA', nombre='A borrar', inicio_campana=datetime(2026, 1, 1), milestones=[])
+    campana_de_prueba = list_campanas(engine)[0]
+
+    resultado = borrar_campana(engine, campana_de_prueba['id_campana'])
+
+    assert resultado is True
+    assert get_campana(engine, campana_de_prueba['id_campana']) is None
+
+
+def test_borrar_campana_inexistente_regresa_false(engine):
+    assert borrar_campana(engine, 999) is False
 
 
 def test_list_eventos_de_campana_incluye_no_capturados(engine):

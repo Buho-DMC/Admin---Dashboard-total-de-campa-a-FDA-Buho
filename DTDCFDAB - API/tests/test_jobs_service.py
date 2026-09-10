@@ -10,6 +10,7 @@ from src.services.jobs import (
     encolar_job,
     get_job,
     get_ultimo_job_de_campana,
+    list_jobs_activos,
     list_jobs_por_lote,
     reintentar,
 )
@@ -91,6 +92,27 @@ def test_get_ultimo_job_de_campana_regresa_el_mas_reciente(engine):
 
 def test_get_ultimo_job_de_campana_sin_jobs_regresa_none(engine):
     assert get_ultimo_job_de_campana(engine, 1) is None
+
+
+def test_list_jobs_activos_regresa_solo_pendiente_y_corriendo(engine):
+    id_campana, id_configuracion = _sembrar_campana_y_configuracion(engine)
+    job_pendiente = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    job_exitoso = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    job_corriendo = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE dtdcfdab_job_ejecucion SET estado = 'exitoso' WHERE id_job_ejecucion = :id_job_ejecucion"),
+            {'id_job_ejecucion': job_exitoso['id_job_ejecucion']},
+        )
+        connection.execute(
+            text("UPDATE dtdcfdab_job_ejecucion SET estado = 'corriendo' WHERE id_job_ejecucion = :id_job_ejecucion"),
+            {'id_job_ejecucion': job_corriendo['id_job_ejecucion']},
+        )
+
+    resultado = list_jobs_activos(engine)
+
+    ids_regresados = {job['id_job_ejecucion'] for job in resultado}
+    assert ids_regresados == {job_pendiente['id_job_ejecucion'], job_corriendo['id_job_ejecucion']}
 
 
 def test_encolar_job_crea_tarea_con_headers_correctos(monkeypatch):
