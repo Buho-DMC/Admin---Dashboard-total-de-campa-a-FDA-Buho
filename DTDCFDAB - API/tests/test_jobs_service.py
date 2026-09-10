@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import MagicMock
 
 import pytest
@@ -5,6 +6,8 @@ from sqlalchemy import text
 
 from src import config
 from src.services.jobs import (
+    CAMPOS_DECIMAL_DE_CONFIGURACION,
+    _configuracion_con_floats,
     crear_job,
     ejecutar_job,
     encolar_job,
@@ -36,6 +39,24 @@ def _sembrar_campana_y_configuracion(engine) -> tuple[int, int]:
         )
         id_configuracion = connection.execute(text('SELECT id_configuracion FROM dtdcfdab_configuracion')).scalar_one()
     return id_campana, id_configuracion
+
+
+def test_configuracion_con_floats_convierte_decimales_de_mysql():
+    # MySQL devuelve `decimal.Decimal` para columnas DECIMAL cuando se consulta con
+    # SQL crudo -- este es el tipo real que llega desde dtdcfdab_configuracion, no
+    # el `float` que usan las demás pruebas (esas corren contra SQLite/REAL, que ya
+    # devuelve float y por eso nunca hubieran agarrado este bug).
+    configuracion_con_decimales = {
+        campo: Decimal('0.622') for campo in CAMPOS_DECIMAL_DE_CONFIGURACION
+    }
+    configuracion_con_decimales['nombre'] = 'v1'
+
+    resultado = _configuracion_con_floats(configuracion_con_decimales)
+
+    for campo in CAMPOS_DECIMAL_DE_CONFIGURACION:
+        assert resultado[campo] == 0.622
+        assert isinstance(resultado[campo], float)
+    assert resultado['nombre'] == 'v1'
 
 
 def test_crear_job_inserta_pendiente(engine):

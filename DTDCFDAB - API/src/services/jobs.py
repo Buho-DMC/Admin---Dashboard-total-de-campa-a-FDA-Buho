@@ -14,6 +14,37 @@ COLUMNAS_JOB = (
     'iniciado_en, terminado_en, error'
 )
 
+CAMPOS_DECIMAL_DE_CONFIGURACION = (
+    'porcentaje_fin',
+    'porcentaje_inicio',
+    'porcentaje_bloque_minimo',
+    'hueco_entregas_dias',
+    'desfase_rescate_dias',
+    'cobertura_aviso',
+)
+
+
+def _configuracion_con_floats(configuracion: dict) -> dict:
+    """Convierte a `float` los campos `DECIMAL` de una fila de `dtdcfdab_configuracion`.
+
+    MySQL devuelve `decimal.Decimal` para columnas `DECIMAL` cuando se
+    consulta con SQL crudo (`sqlalchemy.text`, sin tipado explícito de
+    columnas) — `snapshot_campana` y `pandas.Timedelta` en particular
+    solo aceptan `int`/`float`, igual que el contrato ya declarado en
+    `src/models/configuracion.py`.
+
+    Args:
+        configuracion: fila de `dtdcfdab_configuracion` ya convertida a
+            `dict`, con los campos de `CAMPOS_DECIMAL_DE_CONFIGURACION`
+            potencialmente en `decimal.Decimal`.
+
+    Returns:
+        El mismo diccionario, con esos campos convertidos a `float`.
+    """
+    for campo in CAMPOS_DECIMAL_DE_CONFIGURACION:
+        configuracion[campo] = float(configuracion[campo])
+    return configuracion
+
 
 def crear_job(
     engine: Engine, id_campana: int, id_configuracion: int, tipo: str, id_lote: str | None = None
@@ -267,7 +298,7 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engi
     try:
         resultado_del_etl = snapshot_campana.calcular_snapshot_campana(
             id_claw=id_claw,
-            configuracion=dict(fila_configuracion),
+            configuracion=_configuracion_con_floats(dict(fila_configuracion)),
             claw_client=claw_client,
             retool_engine=retool_engine,
         )
