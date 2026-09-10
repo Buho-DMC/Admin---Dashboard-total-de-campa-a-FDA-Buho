@@ -225,3 +225,84 @@ def test_list_jobs_de_lote_pide_parametro_id_lote(monkeypatch):
     monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
     api_client.list_jobs_de_lote('lote-1')
     assert parametros_capturados == {'id_lote': 'lote-1'}
+
+
+def test_dar_de_alta_campana_manda_post_con_el_cuerpo_correcto(monkeypatch):
+    peticiones_capturadas = []
+
+    def _realizar_peticion_falsa(metodo, ruta, **kwargs):
+        peticiones_capturadas.append({'metodo': metodo, 'ruta': ruta, 'json': kwargs.get('json')})
+        return _RespuestaFalsa({'campana': {'id_campana': 1}, 'job': {'id_job': 1}})
+
+    monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
+
+    resultado = api_client.dar_de_alta_campana(
+        id_claw=212,
+        cliente='FDA',
+        nombre='FDA Salud Visual 26',
+        inicio_campana='2026-09-09T00:00:00',
+        milestones=[{'codigo_evento': 'arte', 'fecha': '2026-09-10T00:00:00'}],
+    )
+
+    assert peticiones_capturadas[0]['metodo'] == 'POST'
+    assert peticiones_capturadas[0]['ruta'] == '/campanas'
+    assert peticiones_capturadas[0]['json']['id_claw'] == 212
+    assert peticiones_capturadas[0]['json']['milestones'] == [{'codigo_evento': 'arte', 'fecha': '2026-09-10T00:00:00'}]
+    assert resultado['job']['id_job'] == 1
+
+
+def test_upsert_evento_de_campana_manda_put_a_la_ruta_correcta(monkeypatch):
+    peticiones_capturadas = []
+
+    def _realizar_peticion_falsa(metodo, ruta, **kwargs):
+        peticiones_capturadas.append({'metodo': metodo, 'ruta': ruta, 'json': kwargs.get('json')})
+        return _RespuestaFalsa({'codigo': 'arte', 'fecha': '2026-09-10T00:00:00'})
+
+    monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
+
+    api_client.upsert_evento_de_campana(1, 'arte', '2026-09-10T00:00:00')
+
+    assert peticiones_capturadas[0]['metodo'] == 'PUT'
+    assert peticiones_capturadas[0]['ruta'] == '/campanas/1/eventos/arte'
+    assert peticiones_capturadas[0]['json'] == {'fecha': '2026-09-10T00:00:00'}
+
+
+def test_crear_configuracion_manda_post_con_todos_los_parametros(monkeypatch):
+    peticiones_capturadas = []
+
+    def _realizar_peticion_falsa(metodo, ruta, **kwargs):
+        peticiones_capturadas.append({'metodo': metodo, 'ruta': ruta, 'json': kwargs.get('json')})
+        return _RespuestaFalsa({'configuracion': {'id_configuracion': 2}, 'id_lote': 'lote-1', 'total_campanas': 19})
+
+    monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
+
+    resultado = api_client.crear_configuracion(
+        nombre='Metodología (ajuste percentil fin, 2026-09-09)',
+        porcentaje_fin=0.98,
+        porcentaje_inicio=0.01,
+        porcentaje_bloque_minimo=0.05,
+        hueco_entregas_dias=10.0,
+        desfase_rescate_dias=0.622,
+        cobertura_aviso=0.95,
+    )
+
+    assert peticiones_capturadas[0]['metodo'] == 'POST'
+    assert peticiones_capturadas[0]['ruta'] == '/configuracion'
+    assert peticiones_capturadas[0]['json']['porcentaje_fin'] == 0.98
+    assert resultado['total_campanas'] == 19
+
+
+def test_reintentar_job_manda_post_a_la_ruta_correcta(monkeypatch):
+    peticiones_capturadas = []
+
+    def _realizar_peticion_falsa(metodo, ruta, **kwargs):
+        peticiones_capturadas.append({'metodo': metodo, 'ruta': ruta})
+        return _RespuestaFalsa({'id_job': 5, 'estado': 'pendiente'})
+
+    monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
+
+    resultado = api_client.reintentar_job(4)
+
+    assert peticiones_capturadas[0]['metodo'] == 'POST'
+    assert peticiones_capturadas[0]['ruta'] == '/jobs/4/reintentar'
+    assert resultado['estado'] == 'pendiente'
