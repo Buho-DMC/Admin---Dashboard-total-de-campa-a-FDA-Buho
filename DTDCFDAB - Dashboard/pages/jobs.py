@@ -28,6 +28,16 @@ if modo_de_busqueda == 'Activos ahora':
         with st.expander('Detalles técnicos'):
             st.exception(error)
         st.stop()
+    if st.button('Reintentar fallidos'):
+        try:
+            resultado_reintento = api_client.reintentar_fallidos()
+        except Exception as error:
+            st.error('No se pudo reintentar los jobs fallidos.')
+            with st.expander('Detalles técnicos'):
+                st.exception(error)
+        else:
+            st.success(f"Se reencolaron {resultado_reintento['total_reintentados']} jobs.")
+
     if not jobs_activos:
         st.info('No hay jobs pendientes ni corriendo en este momento.')
         st.stop()

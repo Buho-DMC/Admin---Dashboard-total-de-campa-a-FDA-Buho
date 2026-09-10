@@ -235,6 +235,18 @@ def test_borrar_campana_pide_delete_a_la_ruta_correcta(monkeypatch):
     assert peticiones_capturadas == [('DELETE', '/campanas/7')]
 
 
+def test_reintentar_fallidos_pide_post_a_la_ruta_correcta(monkeypatch):
+    peticiones_capturadas = []
+    monkeypatch.setattr(
+        api_client,
+        '_realizar_peticion',
+        lambda metodo, ruta, **kwargs: peticiones_capturadas.append((metodo, ruta)) or _RespuestaFalsa({'total_reintentados': 2}),
+    )
+    resultado = api_client.reintentar_fallidos()
+    assert peticiones_capturadas == [('POST', '/jobs/reintentar-fallidos')]
+    assert resultado['total_reintentados'] == 2
+
+
 def test_list_jobs_de_lote_pide_parametro_id_lote(monkeypatch):
     parametros_capturados = {}
 

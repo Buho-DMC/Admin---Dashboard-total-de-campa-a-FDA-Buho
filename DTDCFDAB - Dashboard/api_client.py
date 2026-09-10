@@ -197,6 +197,15 @@ def list_jobs_activos() -> list[dict]:
     return _realizar_peticion('GET', '/jobs/activos').json()
 
 
+def reintentar_fallidos() -> dict:
+    """Reintenta, de una sola vez, todos los jobs fallidos que siguen vigentes.
+
+    Returns:
+        Dict `{'total_reintentados': int}`.
+    """
+    return _realizar_peticion('POST', '/jobs/reintentar-fallidos').json()
+
+
 def list_jobs_de_lote(id_lote: str) -> list[dict]:
     """Todos los jobs de un lote de recálculo global.
 
