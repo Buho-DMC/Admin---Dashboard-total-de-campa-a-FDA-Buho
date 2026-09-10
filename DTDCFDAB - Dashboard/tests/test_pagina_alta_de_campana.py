@@ -54,13 +54,25 @@ def test_alta_de_campana_da_de_alta_al_confirmar(monkeypatch):
     monkeypatch.setattr(
         api_client,
         'dar_de_alta_campana',
-        lambda **kwargs: {'campana': {'id_campana': 1, 'nombre': 'FDA Salud Visual 26'}, 'job': {'id_job': 9}},
+        lambda **kwargs: {
+            'campana': {'id_campana': 1, 'nombre': 'FDA Salud Visual 26'},
+            'job': {'id_job_ejecucion': 9},
+        },
     )
     app_test = AppTest.from_file('pages/alta_de_campana.py')
     app_test.run()
     app_test.button[0].click().run()
     assert len(app_test.success) == 1
     assert app_test.session_state['id_job_seleccionado'] == 9
+
+
+def test_alta_de_campana_usa_form_para_no_refrescar_en_cada_campo(monkeypatch):
+    _preparar(monkeypatch, eventos=_EVENTOS_MULTIPLES)
+    app_test = AppTest.from_file('pages/alta_de_campana.py')
+    app_test.run()
+    assert len(app_test.button) == 1
+    assert app_test.button[0].label == 'Dar de alta'
+    assert app_test.button[0].form_id == 'formulario_alta_de_campana'
 
 
 def test_alta_de_campana_muestra_error_si_falla_la_carga(monkeypatch):

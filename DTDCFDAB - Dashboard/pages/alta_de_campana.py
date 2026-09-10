@@ -22,24 +22,28 @@ if not campanas_retool:
     st.stop()
 
 campanas_por_id_claw = {campana['id_claw']: campana for campana in campanas_retool}
-id_claw_seleccionado = st.selectbox(
-    'Campaña en Claw',
-    list(campanas_por_id_claw.keys()),
-    format_func=lambda id_claw: campanas_por_id_claw[id_claw]['campana'],
-)
-campana_seleccionada = campanas_por_id_claw[id_claw_seleccionado]
 
-st.subheader('Fechas de los hitos FDA')
-mitad = math.ceil(len(catalogo_eventos) / 2)
-eventos_por_columna = (catalogo_eventos[:mitad], catalogo_eventos[mitad:])
+with st.form('formulario_alta_de_campana'):
+    id_claw_seleccionado = st.selectbox(
+        'Campaña en Claw',
+        list(campanas_por_id_claw.keys()),
+        format_func=lambda id_claw: campanas_por_id_claw[id_claw]['campana'],
+    )
 
-fechas_por_codigo_evento = {}
-for columna, eventos_de_la_columna in zip(st.columns(2), eventos_por_columna):
-    with columna:
-        for evento in eventos_de_la_columna:
-            fechas_por_codigo_evento[evento['codigo']] = st.date_input(evento['nombre'], key=f"fecha_{evento['codigo']}")
+    st.subheader('Fechas de los hitos FDA')
+    mitad = math.ceil(len(catalogo_eventos) / 2)
+    eventos_por_columna = (catalogo_eventos[:mitad], catalogo_eventos[mitad:])
 
-if st.button('Dar de alta'):
+    fechas_por_codigo_evento = {}
+    for columna, eventos_de_la_columna in zip(st.columns(2), eventos_por_columna):
+        with columna:
+            for evento in eventos_de_la_columna:
+                fechas_por_codigo_evento[evento['codigo']] = st.date_input(evento['nombre'], key=f"fecha_{evento['codigo']}")
+
+    enviado = st.form_submit_button('Dar de alta')
+
+if enviado:
+    campana_seleccionada = campanas_por_id_claw[id_claw_seleccionado]
     milestones = [
         {'codigo_evento': codigo_evento, 'fecha': fecha.isoformat()}
         for codigo_evento, fecha in fechas_por_codigo_evento.items()
@@ -58,6 +62,6 @@ if st.button('Dar de alta'):
             st.exception(error)
     else:
         st.success(f"Campaña '{resultado['campana']['nombre']}' creada.")
-        st.session_state['id_job_seleccionado'] = resultado['job']['id_job']
+        st.session_state['id_job_seleccionado'] = resultado['job']['id_job_ejecucion']
         if st.button('Ver progreso del job'):
             st.switch_page('pages/jobs.py')

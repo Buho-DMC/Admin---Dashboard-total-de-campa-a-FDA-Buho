@@ -12,13 +12,28 @@ st_autorefresh(interval=30_000, key='autorefresh_jobs')
 id_lote_preseleccionado = st.session_state.get('id_lote_seleccionado', '')
 id_job_preseleccionado = st.session_state.get('id_job_seleccionado')
 
-modo_de_busqueda = st.radio('Buscar por', ['Lote (recálculo global)', 'Job individual (alta de campaña)'])
+modo_de_busqueda = st.radio(
+    'Buscar por', ['Lote (recálculo global)', 'Job individual (alta de campaña)', 'Activos ahora']
+)
 
 if st.button('Actualizar estado'):
     st.rerun()
 
 jobs_a_mostrar = []
-if modo_de_busqueda == 'Lote (recálculo global)':
+if modo_de_busqueda == 'Activos ahora':
+    try:
+        jobs_activos = api_client.list_jobs_activos()
+    except Exception as error:
+        st.error('No se pudo obtener los jobs activos.')
+        with st.expander('Detalles técnicos'):
+            st.exception(error)
+        st.stop()
+    if not jobs_activos:
+        st.info('No hay jobs pendientes ni corriendo en este momento.')
+        st.stop()
+    st.dataframe(jobs_activos, hide_index=True)
+    st.stop()
+elif modo_de_busqueda == 'Lote (recálculo global)':
     id_lote = st.text_input('Id de lote', value=id_lote_preseleccionado)
     if not id_lote:
         st.info('Escribe un id de lote para ver el progreso de sus jobs.')
@@ -52,9 +67,9 @@ for job in jobs_a_mostrar:
     columna_estado, columna_accion = st.columns([3, 1])
     columna_estado.write(f"Campaña {job['id_campana']} — {job['estado']}")
     if job['estado'] == 'fallido':
-        if columna_accion.button('Reintentar', key=f"reintentar_{job['id_job']}"):
+        if columna_accion.button('Reintentar', key=f"reintentar_{job['id_job_ejecucion']}"):
             try:
-                api_client.reintentar_job(job['id_job'])
+                api_client.reintentar_job(job['id_job_ejecucion'])
             except Exception as error:
                 st.error('No se pudo reintentar el job.')
                 with st.expander('Detalles técnicos'):

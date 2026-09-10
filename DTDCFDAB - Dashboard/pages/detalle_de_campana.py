@@ -39,19 +39,38 @@ except Exception as error:
         st.exception(error)
     st.stop()
 
+@st.fragment
+def _mostrar_fechas_de_hitos(id_campana: int, eventos_de_campana: list[dict]) -> None:
+    """Pinta y guarda las fechas de hitos de una campaña sin refrescar el resto de la página.
+
+    Aislado en un fragment: guardar la fecha de un hito no debe volver a pedir
+    la lista de campañas, el snapshot ni el último job — eso solo hace falta
+    si el usuario cambia de campaña en el selector de arriba (que sigue
+    disparando un rerun completo, como debe).
+
+    Args:
+        id_campana: campaña a la que pertenecen los hitos.
+        eventos_de_campana: catálogo de hitos con su fecha capturada (o `None`).
+
+    Returns:
+        None.
+    """
+    for evento in eventos_de_campana:
+        fecha_actual = datetime.fromisoformat(evento['fecha']).date() if evento['fecha'] else None
+        fecha_nueva = st.date_input(evento['nombre'], value=fecha_actual, key=f"fecha_{evento['codigo']}")
+        if st.button(f"Guardar {evento['nombre']}", key=f"guardar_{evento['codigo']}") and fecha_nueva is not None:
+            try:
+                api_client.upsert_evento_de_campana(id_campana, evento['codigo'], fecha_nueva.isoformat())
+            except Exception as error:
+                st.error('No se pudo guardar la fecha.')
+                with st.expander('Detalles técnicos'):
+                    st.exception(error)
+            else:
+                st.success('Fecha guardada.')
+
+
 st.subheader('Fechas de hitos')
-for evento in eventos_de_campana:
-    fecha_actual = datetime.fromisoformat(evento['fecha']).date() if evento['fecha'] else None
-    fecha_nueva = st.date_input(evento['nombre'], value=fecha_actual, key=f"fecha_{evento['codigo']}")
-    if st.button(f"Guardar {evento['nombre']}", key=f"guardar_{evento['codigo']}") and fecha_nueva is not None:
-        try:
-            api_client.upsert_evento_de_campana(id_campana, evento['codigo'], fecha_nueva.isoformat())
-        except Exception as error:
-            st.error('No se pudo guardar la fecha.')
-            with st.expander('Detalles técnicos'):
-                st.exception(error)
-        else:
-            st.success('Fecha guardada.')
+_mostrar_fechas_de_hitos(id_campana, eventos_de_campana)
 
 st.subheader('Snapshot')
 if snapshot is None:
@@ -61,3 +80,17 @@ else:
 
 st.subheader('Último job')
 st.write(f"Estado: {ultimo_job['estado']}")
+if ultimo_job['estado'] == 'fallido' and ultimo_job.get('error'):
+    st.error(ultimo_job['error'])
+
+st.subheader('Borrar campaña')
+confirmar_borrado = st.checkbox('Confirmo que quiero borrar esta campaña y todo su historial')
+if st.button('Borrar campaña', disabled=not confirmar_borrado):
+    try:
+        api_client.borrar_campana(id_campana)
+    except Exception as error:
+        st.error('No se pudo borrar la campaña.')
+        with st.expander('Detalles técnicos'):
+            st.exception(error)
+    else:
+        st.success('Campaña borrada.')

@@ -181,10 +181,20 @@ def get_job(id_job: int) -> dict:
         id_job: id del job.
 
     Returns:
-        Dict con `id_job`, `id_campana`, `id_configuracion`, `tipo`, `id_lote`,
+        Dict con `id_job_ejecucion`, `id_campana`, `id_configuracion`, `tipo`, `id_lote`,
         `estado`, y el mensaje de error si `estado == 'fallido'`.
     """
     return _realizar_peticion('GET', f'/jobs/{id_job}').json()
+
+
+def list_jobs_activos() -> list[dict]:
+    """Jobs en `pendiente` o `corriendo`, sin necesidad de buscar por id ni lote.
+
+    Returns:
+        Lista de dicts con la misma forma que `get_job`, ordenada por
+        `id_job_ejecucion` descendente.
+    """
+    return _realizar_peticion('GET', '/jobs/activos').json()
 
 
 def list_jobs_de_lote(id_lote: str) -> list[dict]:
@@ -222,6 +232,18 @@ def dar_de_alta_campana(id_claw: int, cliente: str, nombre: str, inicio_campana:
         'milestones': milestones,
     }
     return _realizar_peticion('POST', '/campanas', json=cuerpo_de_la_peticion).json()
+
+
+def borrar_campana(id_campana: int) -> None:
+    """Borra una campaña dada de alta, junto con sus hitos, snapshot y jobs.
+
+    Args:
+        id_campana: id de la campaña a borrar.
+
+    Returns:
+        None.
+    """
+    _realizar_peticion('DELETE', f'/campanas/{id_campana}')
 
 
 def upsert_evento_de_campana(id_campana: int, codigo_evento: str, fecha: str) -> dict:

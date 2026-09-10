@@ -215,6 +215,26 @@ def test_get_job_pide_ruta_con_id(monkeypatch):
     assert rutas_capturadas == ['/jobs/5']
 
 
+def test_list_jobs_activos_pide_la_ruta_correcta(monkeypatch):
+    rutas_capturadas = []
+    monkeypatch.setattr(
+        api_client, '_realizar_peticion', lambda metodo, ruta, **kwargs: rutas_capturadas.append(ruta) or _RespuestaFalsa([])
+    )
+    api_client.list_jobs_activos()
+    assert rutas_capturadas == ['/jobs/activos']
+
+
+def test_borrar_campana_pide_delete_a_la_ruta_correcta(monkeypatch):
+    peticiones_capturadas = []
+    monkeypatch.setattr(
+        api_client,
+        '_realizar_peticion',
+        lambda metodo, ruta, **kwargs: peticiones_capturadas.append((metodo, ruta)) or _RespuestaFalsa(None),
+    )
+    api_client.borrar_campana(7)
+    assert peticiones_capturadas == [('DELETE', '/campanas/7')]
+
+
 def test_list_jobs_de_lote_pide_parametro_id_lote(monkeypatch):
     parametros_capturados = {}
 
@@ -232,7 +252,7 @@ def test_dar_de_alta_campana_manda_post_con_el_cuerpo_correcto(monkeypatch):
 
     def _realizar_peticion_falsa(metodo, ruta, **kwargs):
         peticiones_capturadas.append({'metodo': metodo, 'ruta': ruta, 'json': kwargs.get('json')})
-        return _RespuestaFalsa({'campana': {'id_campana': 1}, 'job': {'id_job': 1}})
+        return _RespuestaFalsa({'campana': {'id_campana': 1}, 'job': {'id_job_ejecucion': 1}})
 
     monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
 
@@ -248,7 +268,7 @@ def test_dar_de_alta_campana_manda_post_con_el_cuerpo_correcto(monkeypatch):
     assert peticiones_capturadas[0]['ruta'] == '/campanas'
     assert peticiones_capturadas[0]['json']['id_claw'] == 212
     assert peticiones_capturadas[0]['json']['milestones'] == [{'codigo_evento': 'arte', 'fecha': '2026-09-10T00:00:00'}]
-    assert resultado['job']['id_job'] == 1
+    assert resultado['job']['id_job_ejecucion'] == 1
 
 
 def test_upsert_evento_de_campana_manda_put_a_la_ruta_correcta(monkeypatch):
@@ -297,7 +317,7 @@ def test_reintentar_job_manda_post_a_la_ruta_correcta(monkeypatch):
 
     def _realizar_peticion_falsa(metodo, ruta, **kwargs):
         peticiones_capturadas.append({'metodo': metodo, 'ruta': ruta})
-        return _RespuestaFalsa({'id_job': 5, 'estado': 'pendiente'})
+        return _RespuestaFalsa({'id_job_ejecucion': 5, 'estado': 'pendiente'})
 
     monkeypatch.setattr(api_client, '_realizar_peticion', _realizar_peticion_falsa)
 
