@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from google.cloud import tasks_v2
 from sqlalchemy import text
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 
 from src import config
 from src.services import snapshot_campana
@@ -277,6 +277,60 @@ def reintentar(engine: Engine, tasks_client: tasks_v2.CloudTasksClient, id_job_e
     return job_nuevo
 
 
+def _upsert_snapshot(
+    connection: Connection, id_campana: int, id_configuracion: int, resultado_del_etl: dict, calculado_en: datetime
+) -> None:
+    """Inserta o actualiza el snapshot de una (campaña, configuración).
+
+    Un snapshot representa el cálculo MÁS RECIENTE de esa combinación, no un
+    evento que solo puede pasar una vez -- recalcular una campaña que ya tiene
+    snapshot (reintento manual, "reintentar fallidos", recálculo global) es el
+    flujo normal, no una excepción. Un `INSERT` puro chocaría contra la
+    PRIMARY KEY `(id_campana, id_configuracion)` de `dtdcfdab_campana_snapshot`
+    en ese caso (incidente real 2026-09-10: dos reintentos de la misma campaña
+    encolados con Cloud Tasks, uno tardó más y llegó después de que el otro ya
+    había insertado el snapshot). El dialecto de SQL de upsert difiere entre
+    SQLite (usado en los tests, ver `tests/conftest.py`) y MySQL (producción),
+    así que se elige la sintaxis según `connection.dialect.name`.
+
+    Args:
+        connection: conexión de SQLAlchemy, dentro de la transacción de
+            `ejecutar_job`.
+        id_campana: campaña calculada.
+        id_configuracion: combinación de parámetros con la que se calculó.
+        resultado_del_etl: dict de `snapshot_campana.calcular_snapshot_campana`,
+            con las 14 columnas de fecha y las 13 de metadatos.
+        calculado_en: momento en que terminó este cálculo.
+
+    Returns:
+        None.
+    """
+    columnas_del_resultado = ', '.join(resultado_del_etl.keys())
+    placeholders_del_resultado = ', '.join(f':{nombre_columna}' for nombre_columna in resultado_del_etl.keys())
+    columnas_a_actualizar = [*resultado_del_etl.keys(), 'calculado_en']
+    parametros = {
+        'id_campana': id_campana, 'id_configuracion': id_configuracion,
+        'calculado_en': calculado_en, **resultado_del_etl,
+    }
+
+    if connection.dialect.name == 'sqlite':
+        actualizacion = ', '.join(f'{columna} = excluded.{columna}' for columna in columnas_a_actualizar)
+        sentencia_upsert = (
+            f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
+            f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en) '
+            f'ON CONFLICT (id_campana, id_configuracion) DO UPDATE SET {actualizacion}'
+        )
+    else:
+        actualizacion = ', '.join(f'{columna} = VALUES({columna})' for columna in columnas_a_actualizar)
+        sentencia_upsert = (
+            f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
+            f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en) '
+            f'ON DUPLICATE KEY UPDATE {actualizacion}'
+        )
+
+    connection.execute(text(sentencia_upsert), parametros)
+
+
 def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engine) -> dict:
     """Ejecuta el ETL real de un job: descarga fuentes, corre Política D, guarda el snapshot.
 
@@ -335,19 +389,14 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engi
         return get_job(engine, id_job_ejecucion)
 
     terminado_en = datetime.now(timezone.utc)
-    columnas_del_resultado = ', '.join(resultado_del_etl.keys())
-    placeholders_del_resultado = ', '.join(f':{nombre_columna}' for nombre_columna in resultado_del_etl.keys())
     try:
         with engine.begin() as connection:
-            connection.execute(
-                text(
-                    f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
-                    f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en)'
-                ),
-                {
-                    'id_campana': job_a_ejecutar['id_campana'], 'id_configuracion': job_a_ejecutar['id_configuracion'],
-                    'calculado_en': terminado_en, **resultado_del_etl,
-                },
+            _upsert_snapshot(
+                connection,
+                id_campana=job_a_ejecutar['id_campana'],
+                id_configuracion=job_a_ejecutar['id_configuracion'],
+                resultado_del_etl=resultado_del_etl,
+                calculado_en=terminado_en,
             )
             connection.execute(
                 text(

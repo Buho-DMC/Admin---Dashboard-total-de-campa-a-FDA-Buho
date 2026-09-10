@@ -301,3 +301,40 @@ def test_ejecutar_job_marca_fallido_si_falla_la_persistencia_del_snapshot(engine
 def test_ejecutar_job_inexistente_lanza_valueerror(engine):
     with pytest.raises(ValueError):
         ejecutar_job(engine, 999, claw_client=None, retool_engine=None)
+
+
+def test_ejecutar_job_recalcula_campana_ya_calculada_actualiza_en_vez_de_fallar(engine, monkeypatch):
+    # Reproduce el incidente real (2026-09-10): dos jobs de la misma (campana,
+    # configuracion) -- uno de un reintento manual encolado antes de que el otro
+    # terminara -- calculan la misma combinacion. El primero inserta el snapshot;
+    # el segundo debe ACTUALIZARLO (Duplicate entry '{id_campana}-{id_configuracion}'
+    # para la PRIMARY key de dtdcfdab_campana_snapshot), no terminar en 'fallido'.
+    import src.services.jobs as jobs_module
+
+    id_job_ejecucion_uno, id_campana, id_configuracion = _sembrar_dependencias_de_ejecucion(engine)
+    id_job_ejecucion_dos = crear_job(
+        engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta'
+    )['id_job_ejecucion']
+
+    monkeypatch.setattr(
+        jobs_module.snapshot_campana, 'calcular_snapshot_campana',
+        lambda **kwargs: {'numero_envios': 10, 'numero_folios': 5},
+    )
+    resultado_uno = ejecutar_job(engine, id_job_ejecucion_uno, claw_client=None, retool_engine=None)
+    assert resultado_uno['estado'] == 'exitoso'
+
+    monkeypatch.setattr(
+        jobs_module.snapshot_campana, 'calcular_snapshot_campana',
+        lambda **kwargs: {'numero_envios': 20, 'numero_folios': 8},
+    )
+    resultado_dos = ejecutar_job(engine, id_job_ejecucion_dos, claw_client=None, retool_engine=None)
+
+    assert resultado_dos['estado'] == 'exitoso'
+    with engine.connect() as connection:
+        filas_del_snapshot = connection.execute(
+            text('SELECT numero_envios, numero_folios FROM dtdcfdab_campana_snapshot WHERE id_campana = :id_campana'),
+            {'id_campana': id_campana},
+        ).mappings().all()
+    assert len(filas_del_snapshot) == 1
+    assert filas_del_snapshot[0]['numero_envios'] == 20
+    assert filas_del_snapshot[0]['numero_folios'] == 8
