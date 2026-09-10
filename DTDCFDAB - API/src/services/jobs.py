@@ -46,6 +46,34 @@ def _configuracion_con_floats(configuracion: dict) -> dict:
     return configuracion
 
 
+def _marcar_fallido(engine: Engine, id_job_ejecucion: int, error: Exception) -> None:
+    """Marca un job como `fallido`, guardando el error para diagnóstico.
+
+    Se usa tanto si `calcular_snapshot_campana` lanza una excepción como si
+    falla la persistencia del snapshot ya calculado (ej. un valor que
+    MySQL rechaza) -- en ambos casos el job debe terminar en `fallido` en
+    vez de dejar la excepción sin atrapar, que dejaría el job en
+    `corriendo` reintentando indefinidamente vía Cloud Tasks.
+
+    Args:
+        engine: engine de SQLAlchemy.
+        id_job_ejecucion: id del job a marcar.
+        error: excepción capturada -- su mensaje se guarda en la columna `error`.
+
+    Returns:
+        None.
+    """
+    terminado_en = datetime.now(timezone.utc)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "UPDATE dtdcfdab_job_ejecucion SET estado = 'fallido', terminado_en = :terminado_en, "
+                'error = :error WHERE id_job_ejecucion = :id_job_ejecucion'
+            ),
+            {'terminado_en': terminado_en, 'error': str(error), 'id_job_ejecucion': id_job_ejecucion},
+        )
+
+
 def crear_job(
     engine: Engine, id_campana: int, id_configuracion: int, tipo: str, id_lote: str | None = None
 ) -> dict:
@@ -303,36 +331,31 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engi
             retool_engine=retool_engine,
         )
     except Exception as error:
-        terminado_en = datetime.now(timezone.utc)
-        with engine.begin() as connection:
-            connection.execute(
-                text(
-                    "UPDATE dtdcfdab_job_ejecucion SET estado = 'fallido', terminado_en = :terminado_en, "
-                    'error = :error WHERE id_job_ejecucion = :id_job_ejecucion'
-                ),
-                {'terminado_en': terminado_en, 'error': str(error), 'id_job_ejecucion': id_job_ejecucion},
-            )
+        _marcar_fallido(engine, id_job_ejecucion, error)
         return get_job(engine, id_job_ejecucion)
 
     terminado_en = datetime.now(timezone.utc)
     columnas_del_resultado = ', '.join(resultado_del_etl.keys())
     placeholders_del_resultado = ', '.join(f':{nombre_columna}' for nombre_columna in resultado_del_etl.keys())
-    with engine.begin() as connection:
-        connection.execute(
-            text(
-                f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
-                f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en)'
-            ),
-            {
-                'id_campana': job_a_ejecutar['id_campana'], 'id_configuracion': job_a_ejecutar['id_configuracion'],
-                'calculado_en': terminado_en, **resultado_del_etl,
-            },
-        )
-        connection.execute(
-            text(
-                "UPDATE dtdcfdab_job_ejecucion SET estado = 'exitoso', terminado_en = :terminado_en "
-                'WHERE id_job_ejecucion = :id_job_ejecucion'
-            ),
-            {'terminado_en': terminado_en, 'id_job_ejecucion': id_job_ejecucion},
-        )
+    try:
+        with engine.begin() as connection:
+            connection.execute(
+                text(
+                    f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
+                    f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en)'
+                ),
+                {
+                    'id_campana': job_a_ejecutar['id_campana'], 'id_configuracion': job_a_ejecutar['id_configuracion'],
+                    'calculado_en': terminado_en, **resultado_del_etl,
+                },
+            )
+            connection.execute(
+                text(
+                    "UPDATE dtdcfdab_job_ejecucion SET estado = 'exitoso', terminado_en = :terminado_en "
+                    'WHERE id_job_ejecucion = :id_job_ejecucion'
+                ),
+                {'terminado_en': terminado_en, 'id_job_ejecucion': id_job_ejecucion},
+            )
+    except Exception as error:
+        _marcar_fallido(engine, id_job_ejecucion, error)
     return get_job(engine, id_job_ejecucion)

@@ -922,7 +922,11 @@ def _ensamblar_snapshot(resultados_etapas: dict, metadatos_etapas: dict, kpis_ci
         kpis_ciclo: de `calcular_kpis_ciclo_folio`.
 
     Returns:
-        Dict con las 14 columnas de fecha y las 13 de metadatos.
+        Dict con las 14 columnas de fecha y las 13 de metadatos. Los
+        sentinels de "sin dato" de pandas (`pd.NaT`, `float('nan')`) se
+        convierten a `None`, porque `jobs.py::ejecutar_job` inserta este
+        dict directamente por nombre de columna y MySQL rechaza esos
+        literales en columnas `DATETIME`/`DECIMAL` nullable.
     """
     snapshot = {}
     for nombre_etapa, (columna_inicio, columna_fin) in COLUMNAS_POR_ETAPA.items():
@@ -946,7 +950,7 @@ def _ensamblar_snapshot(resultados_etapas: dict, metadatos_etapas: dict, kpis_ci
         'respuesta_fda_dias': kpis_ciclo['respuesta_fda_mediana_dias'],
         'folios_invertidos': kpis_ciclo['folios_invertidos'],
     })
-    return snapshot
+    return {campo: (None if pd.isna(valor) else valor) for campo, valor in snapshot.items()}
 
 
 def calcular_snapshot_campana(id_claw: int, configuracion: dict, claw_client: httpx.Client, retool_engine) -> dict:

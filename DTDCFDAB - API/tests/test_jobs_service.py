@@ -276,6 +276,28 @@ def test_ejecutar_job_marca_exitoso_y_escribe_snapshot(engine, monkeypatch):
     assert fila_del_snapshot['numero_folios'] == 5
 
 
+def test_ejecutar_job_marca_fallido_si_falla_la_persistencia_del_snapshot(engine, monkeypatch):
+    # Reproduce el incidente real: calcular_snapshot_campana termina bien, pero el
+    # INSERT del snapshot truena (en producción fue un pd.NaT/float('nan') que MySQL
+    # rechazó; aquí forzamos el mismo tipo de fallo con una columna inexistente,
+    # ya que SQLite sí acepta NaT/nan). Antes de este fix, esa excepción no se
+    # atrapaba y el job se quedaba en 'corriendo' reintentando para siempre vía
+    # Cloud Tasks -- debe terminar en 'fallido', igual que un fallo del ETL.
+    import src.services.jobs as jobs_module
+
+    id_job_ejecucion, _, _ = _sembrar_dependencias_de_ejecucion(engine)
+    resultado_con_columna_inexistente = {'columna_que_no_existe': 1}
+    monkeypatch.setattr(
+        jobs_module.snapshot_campana, 'calcular_snapshot_campana', lambda **kwargs: resultado_con_columna_inexistente
+    )
+
+    resultado = ejecutar_job(engine, id_job_ejecucion, claw_client=None, retool_engine=None)
+
+    assert resultado['estado'] == 'fallido'
+    assert resultado['error']
+    assert resultado['terminado_en'] is not None
+
+
 def test_ejecutar_job_inexistente_lanza_valueerror(engine):
     with pytest.raises(ValueError):
         ejecutar_job(engine, 999, claw_client=None, retool_engine=None)

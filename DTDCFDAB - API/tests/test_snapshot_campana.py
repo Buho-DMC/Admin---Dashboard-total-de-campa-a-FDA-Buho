@@ -12,6 +12,7 @@ from src.services.snapshot_campana import (
     _calcular_extremo,
     _configuracion_del_extremo,
     _construir_configuracion_etapas,
+    _ensamblar_snapshot,
     bloques_de_actividad,
     calcular_etapa,
     calcular_etapas,
@@ -264,6 +265,44 @@ def test_calcular_extremo_metodo_desconocido_lanza_valueerror():
 
     with pytest.raises(ValueError):
         _calcular_extremo(datos, configuracion_extremo)
+
+
+def test_ensamblar_snapshot_convierte_nat_y_nan_a_none():
+    # Una etapa sin datos (ej. una campaña sin actividades de precampaña en Retool)
+    # devuelve pd.NaT como 'inicio'/'fin', y un KPI sin folios digitales devuelve
+    # float('nan') -- es el sentinel de "sin dato" que ya usa el resto del módulo
+    # (ver _calcular_extremo y calcular_kpis_ciclo_folio). MySQL rechaza el literal
+    # 'NaT'/'nan' en columnas DATETIME/DECIMAL nullable -- necesitan NULL. Sin esta
+    # conversión, jobs.py truena en el INSERT y el job se queda atorado reintentando.
+    resultados_etapas = {
+        nombre_etapa: {
+            'inicio': pd.Timestamp('2026-01-01'), 'fin': pd.Timestamp('2026-01-02'),
+            'numero_unidades_total': 5, 'numero_unidades_con_dato': 5,
+        }
+        for nombre_etapa in ('artes', 'preproyectos', 'aprobaciones', 'impresion', 'pick_pack')
+    }
+    resultados_etapas['precampana'] = {
+        'inicio': pd.NaT, 'fin': pd.NaT, 'numero_unidades_total': 0, 'numero_unidades_con_dato': 0,
+    }
+    resultados_etapas['entregas'] = {
+        'inicio': pd.Timestamp('2026-01-03'), 'fin': pd.Timestamp('2026-01-10'),
+        'numero_unidades_total': 5, 'numero_unidades_con_dato': 5,
+        'porcentaje_alcanzado': 1.0, 'fecha_completado_al_100': pd.NaT,
+    }
+    metadatos_etapas = {'entregas': {'rescate_entregas': {'sin_fecha_entregado': 0, 'sin_registro_entrega': 0}}}
+    kpis_ciclo = {
+        'respuesta_buho_mediana_dias': float('nan'), 'respuesta_fda_mediana_dias': 2.5, 'folios_invertidos': 0,
+    }
+
+    snapshot = _ensamblar_snapshot(resultados_etapas, metadatos_etapas, kpis_ciclo)
+
+    assert snapshot['inicio_precampana'] is None
+    assert snapshot['fin_precampana'] is None
+    assert snapshot['ultima_entrega'] is None
+    assert snapshot['respuesta_buho_dias'] is None
+    assert snapshot['respuesta_fda_dias'] == 2.5
+    assert snapshot['inicio_carga_artes'] == pd.Timestamp('2026-01-01')
+    assert snapshot['numero_actividades'] == 0
 
 
 def test_calcular_etapa_aplica_regla_y_calcula_inicio_y_fin():
