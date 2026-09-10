@@ -58,6 +58,17 @@ def test_get_jobs_activos_ok(monkeypatch):
     assert len(response.json()) == 1
 
 
+def test_post_jobs_reintentar_fallidos_ok(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
+    with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.jobs.clients.get_tasks_client'), \
+         patch('src.routers.jobs.jobs.reintentar_fallidos', return_value=3):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.post('/jobs/reintentar-fallidos', headers=HEADERS)
+    assert response.status_code == 200
+    assert response.json() == {'total_reintentados': 3}
+
+
 def test_post_job_reintentar_404(monkeypatch):
     monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \

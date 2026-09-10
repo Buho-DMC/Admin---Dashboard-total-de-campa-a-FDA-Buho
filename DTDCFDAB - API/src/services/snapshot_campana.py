@@ -986,6 +986,13 @@ def calcular_snapshot_campana(id_claw: int, configuracion: dict, claw_client: ht
     if datos_claw_tracking is None or datos_claw_tracking.empty:
         raise ValueError(f'Claw no devolvió tracking de Entregas para id_claw={id_claw}.')
 
+    # A diferencia de Retool (obtener_datos_retool_digital/_precampana), obtener_datos_claw
+    # no tipa nada — 'time' llega como texto crudo del JSON. Pick & Pack es la única etapa
+    # que no pasa por una regla que lo convierta al vuelo (regla_rescate_entregas sí lo hace
+    # para Entregas), así que sin esto bloques_de_actividad truena con "Can only use .dt
+    # accessor with datetimelike values" al calcular el inicio por el método 'bloque'.
+    datos_claw_picks = _convertir_tipos_de_datos(datos_claw_picks, {'time': 'datetime'})
+
     fuentes = {
         'retool_digital': datos_retool_digital,
         'retool_precampana': datos_retool_precampana,

@@ -13,6 +13,7 @@ from src.services.jobs import (
     list_jobs_activos,
     list_jobs_por_lote,
     reintentar,
+    reintentar_fallidos,
 )
 
 
@@ -154,6 +155,60 @@ def test_reintentar_crea_nuevo_job_y_encola(engine):
 def test_reintentar_job_inexistente_regresa_none(engine):
     tasks_client = MagicMock()
     assert reintentar(engine, tasks_client, 999) is None
+
+
+def _marcar_fallido(engine, id_job_ejecucion: int) -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE dtdcfdab_job_ejecucion SET estado = 'fallido' WHERE id_job_ejecucion = :id_job_ejecucion"),
+            {'id_job_ejecucion': id_job_ejecucion},
+        )
+
+
+def _marcar_exitoso(engine, id_job_ejecucion: int) -> None:
+    with engine.begin() as connection:
+        connection.execute(
+            text("UPDATE dtdcfdab_job_ejecucion SET estado = 'exitoso' WHERE id_job_ejecucion = :id_job_ejecucion"),
+            {'id_job_ejecucion': id_job_ejecucion},
+        )
+
+
+def test_reintentar_fallidos_reencola_la_campana_que_sigue_fallando(engine):
+    id_campana, id_configuracion = _sembrar_campana_y_configuracion(engine)
+    job_fallido = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    _marcar_fallido(engine, job_fallido['id_job_ejecucion'])
+
+    tasks_client = MagicMock()
+    tasks_client.queue_path.return_value = 'projects/p/locations/l/queues/q'
+
+    total_reintentados = reintentar_fallidos(engine, tasks_client)
+
+    assert total_reintentados == 1
+    tasks_client.create_task.assert_called_once()
+    assert get_ultimo_job_de_campana(engine, id_campana)['estado'] == 'pendiente'
+
+
+def test_reintentar_fallidos_ignora_fallo_ya_resuelto_por_un_reintento_posterior(engine):
+    # Una campana con un fallo VIEJO ya resuelto (el job mas reciente es exitoso) no debe
+    # reintentarse de nuevo -- solo cuenta un fallo vigente (el ultimo job de la campana).
+    id_campana, id_configuracion = _sembrar_campana_y_configuracion(engine)
+    job_viejo_fallido = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    _marcar_fallido(engine, job_viejo_fallido['id_job_ejecucion'])
+    job_reintento_exitoso = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    _marcar_exitoso(engine, job_reintento_exitoso['id_job_ejecucion'])
+
+    tasks_client = MagicMock()
+
+    total_reintentados = reintentar_fallidos(engine, tasks_client)
+
+    assert total_reintentados == 0
+    tasks_client.create_task.assert_not_called()
+
+
+def test_reintentar_fallidos_sin_fallidos_regresa_cero(engine):
+    tasks_client = MagicMock()
+    assert reintentar_fallidos(engine, tasks_client) == 0
+    tasks_client.create_task.assert_not_called()
 
 
 def _sembrar_dependencias_de_ejecucion(engine):

@@ -149,6 +149,50 @@ def encolar_job(tasks_client: tasks_v2.CloudTasksClient, id_job_ejecucion: int) 
     tasks_client.create_task(request={'parent': queue_path, 'task': task_definition})
 
 
+def list_jobs_fallidos_vigentes(engine: Engine) -> list[dict]:
+    """Jobs en `fallido` que siguen siendo el job más reciente de su campaña.
+
+    Descarta fallos históricos ya resueltos por un reintento posterior
+    exitoso: una campaña solo cuenta como "fallando" si su job MÁS
+    RECIENTE (el de `id_job_ejecucion` más alto para esa `id_campana`)
+    sigue en `fallido` — reintentar un fallo viejo ya resuelto crearía un
+    job duplicado sobre una campaña que ya está bien.
+
+    Args:
+        engine: engine de SQLAlchemy.
+
+    Returns:
+        Lista de dicts, uno por campaña con un fallo vigente.
+    """
+    with engine.connect() as connection:
+        result_rows = connection.execute(
+            text(
+                f'SELECT {COLUMNAS_JOB} FROM dtdcfdab_job_ejecucion j1 '
+                "WHERE j1.estado = 'fallido' AND j1.id_job_ejecucion = ("
+                '  SELECT MAX(j2.id_job_ejecucion) FROM dtdcfdab_job_ejecucion j2 '
+                '  WHERE j2.id_campana = j1.id_campana'
+                ')'
+            )
+        )
+        return [dict(row._mapping) for row in result_rows]
+
+
+def reintentar_fallidos(engine: Engine, tasks_client: tasks_v2.CloudTasksClient) -> int:
+    """Reintenta, de una sola vez, todos los jobs fallidos que siguen vigentes.
+
+    Args:
+        engine: engine de SQLAlchemy.
+        tasks_client: cliente de Cloud Tasks.
+
+    Returns:
+        Número de jobs reencolados.
+    """
+    jobs_fallidos = list_jobs_fallidos_vigentes(engine)
+    for job_fallido in jobs_fallidos:
+        reintentar(engine, tasks_client, job_fallido['id_job_ejecucion'])
+    return len(jobs_fallidos)
+
+
 def reintentar(engine: Engine, tasks_client: tasks_v2.CloudTasksClient, id_job_ejecucion: int) -> dict | None:
     """Reencola manualmente un job fallido: crea una fila nueva y la encola.
 

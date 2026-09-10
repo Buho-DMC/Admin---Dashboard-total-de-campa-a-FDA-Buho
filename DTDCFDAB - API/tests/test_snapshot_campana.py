@@ -518,6 +518,43 @@ def test_calcular_snapshot_campana_produce_las_14_fechas_y_13_metadatos(monkeypa
     assert snapshot['folios_invertidos'] == 0
 
 
+def test_calcular_snapshot_campana_convierte_time_de_claw_picks_a_datetime(monkeypatch):
+    # Regresion: obtener_datos_claw regresa 'time' como texto crudo del JSON de Claw
+    # (ver test_obtener_datos_claw_acepta_objeto_con_result), sin convertirlo. Sin una
+    # conversion explicita, bloques_de_actividad truena con "Can only use .dt accessor
+    # with datetimelike values" al calcular el inicio de Pick & Pack (metodo 'bloque').
+    fuentes = _fuentes_de_campana_de_ejemplo()
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_digital',
+        lambda retool_engine, id_claw: fuentes['retool_digital'],
+    )
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_precampana',
+        lambda retool_engine, id_claw: fuentes['retool_precampana'],
+    )
+    claw_picks_crudo = pd.DataFrame({
+        'box_id': [1, 1, 1, 2, 2],
+        'time': [
+            '2026-01-10 08:00:00', '2026-01-10 08:10:00', '2026-01-10 08:20:00',
+            '2026-01-10 09:00:00', '2026-01-10 09:15:00',
+        ],
+    })
+
+    def claw_falso(claw_client, ruta_base, id_claw):
+        if ruta_base == snapshot_campana_module.RUTA_CLAW_PICKS:
+            return claw_picks_crudo
+        return fuentes['claw_tracking']
+
+    monkeypatch.setattr(snapshot_campana_module, 'obtener_datos_claw', claw_falso)
+
+    snapshot = calcular_snapshot_campana(
+        id_claw=229, configuracion=CONFIGURACION_DE_EJEMPLO, claw_client=None, retool_engine=None
+    )
+
+    assert snapshot['inicio_pick_pack'] == pd.Timestamp('2026-01-10 08:00:00')
+    assert snapshot['fin_pick_pack'] == pd.Timestamp('2026-01-10 09:15:00')
+
+
 def test_calcular_snapshot_campana_sin_picks_de_claw_lanza_valueerror(monkeypatch):
     fuentes = _fuentes_de_campana_de_ejemplo()
     monkeypatch.setattr(

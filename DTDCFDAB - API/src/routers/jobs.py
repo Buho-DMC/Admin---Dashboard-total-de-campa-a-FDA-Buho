@@ -75,6 +75,22 @@ def get_jobs(id_lote: str | None = None) -> list[dict]:
         engine.dispose()
 
 
+@router.post('/jobs/reintentar-fallidos')
+def post_jobs_reintentar_fallidos() -> dict:
+    """Reintenta de una sola vez todos los jobs fallidos vigentes (uno por campaña).
+
+    Returns:
+        Dict `{'total_reintentados': int}`.
+    """
+    engine = clients.get_db_engine()
+    tasks_client = clients.get_tasks_client()
+    try:
+        total_reintentados = jobs.reintentar_fallidos(engine, tasks_client)
+    finally:
+        engine.dispose()
+    return {'total_reintentados': total_reintentados}
+
+
 @router.post('/jobs/{id_job_ejecucion}/reintentar', response_model=JobOut)
 def post_job_reintentar(id_job_ejecucion: int) -> dict:
     """Reencola manualmente un job fallido.
