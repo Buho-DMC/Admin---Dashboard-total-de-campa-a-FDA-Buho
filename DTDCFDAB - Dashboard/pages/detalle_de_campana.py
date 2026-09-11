@@ -5,6 +5,20 @@ from datetime import datetime
 import streamlit as st
 
 import api_client
+import charts
+
+
+def _formatear_metrica(valor, formato='', usar_pct=False) -> str:
+    """Aplica un formato a un valor de métrica o retorna 'Sin dato' si es None."""
+    if valor is None:
+        return 'Sin dato'
+    if usar_pct:
+        valor = valor * 100
+        formato = formato or '.2f'
+    
+    texto = f"{valor:{formato}}" if formato else str(valor)
+    return f"{texto}%" if usar_pct else texto
+
 
 st.title('Detalle de campaña')
 
@@ -56,7 +70,13 @@ def _mostrar_fechas_de_hitos(id_campana: int, eventos_de_campana: list[dict]) ->
         None.
     """
     for evento in eventos_de_campana:
-        fecha_actual = datetime.fromisoformat(evento['fecha']).date() if evento['fecha'] else None
+        fecha_actual = None
+        if evento['fecha']:
+            try:
+                fecha_actual = datetime.fromisoformat(evento['fecha']).date()
+            except Exception:
+                pass
+        
         fecha_nueva = st.date_input(evento['nombre'], value=fecha_actual, key=f"fecha_{evento['codigo']}")
         if st.button(f"Guardar {evento['nombre']}", key=f"guardar_{evento['codigo']}") and fecha_nueva is not None:
             try:
@@ -76,7 +96,36 @@ st.subheader('Snapshot')
 if snapshot is None:
     st.info('Aún no se ha calculado el snapshot de esta campaña.')
 else:
-    st.json(snapshot)
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric('Envíos', _formatear_metrica(snapshot.get('numero_envios')))
+    col2.metric('Alcanzado entregas', _formatear_metrica(snapshot.get('porcentaje_alcanzado_entregas'), formato='.2f', usar_pct=True))
+    col3.metric('ODPs', _formatear_metrica(snapshot.get('numero_odps')))
+    col4.metric('Folios', _formatear_metrica(snapshot.get('numero_folios')))
+    
+    col5, col6, col7 = st.columns(3)
+    col5.metric('Respuesta Buho', _formatear_metrica(snapshot.get('respuesta_buho_dias'), formato='.2f'))
+    col6.metric('Respuesta FDA', _formatear_metrica(snapshot.get('respuesta_fda_dias'), formato='.2f'))
+    
+    ultima_entrega_iso = snapshot.get('ultima_entrega')
+    ultima_entrega_str = 'Sin dato'
+    if ultima_entrega_iso:
+        try:
+            ultima_entrega_str = datetime.fromisoformat(ultima_entrega_iso).strftime('%Y-%m-%d')
+        except Exception as error:
+            st.error('No se pudo interpretar la fecha de última entrega.')
+            with st.expander('Detalles técnicos'):
+                st.exception(error)
+
+    col7.metric('Última entrega', ultima_entrega_str)
+
+    figura = charts.construir_grafica_de_linea_de_tiempo(snapshot)
+    if figura is not None:
+        st.plotly_chart(figura, use_container_width=True)
+    else:
+        st.info('Todavía no hay etapas con fecha de inicio y fin.')
+        
+    with st.expander('Ver datos crudos'):
+        st.json(snapshot)
 
 st.subheader('Último job')
 st.write(f"Estado: {ultimo_job['estado']}")
