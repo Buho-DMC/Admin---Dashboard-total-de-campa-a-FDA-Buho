@@ -56,12 +56,19 @@ def construir_grafica_de_percentil(valor_percentil: float, titulo: str) -> go.Fi
     return figura
 
 
-def construir_grafica_de_linea_de_tiempo(snapshot: dict) -> go.Figure | None:
-    """Construye una gráfica de línea de tiempo con las etapas de la campaña.
+ETAPAS = [
+    ('Carga de artes', 'inicio_carga_artes', 'fin_carga_artes'),
+    ('Carga de preproyectos', 'inicio_carga_preproyectos', 'fin_carga_preproyectos'),
+    ('Aprobaciones', 'inicio_aprobaciones', 'fin_aprobaciones'),
+    ('Impresión', 'inicio_impresion', 'fin_impresion'),
+    ('Precampaña', 'inicio_precampana', 'fin_precampana'),
+    ('Pick & Pack', 'inicio_pick_pack', 'fin_pick_pack'),
+    ('Entregas', 'inicio_entregas', 'fin_entregas'),
+]
 
-    Mapea las 7 etapas del snapshot recibidas en el diccionario. Si alguna etapa
-    no tiene fecha de inicio y de fin, se omite de la gráfica. Si no hay ninguna
-    etapa válida, retorna None.
+
+def construir_grafica_por_actividad(snapshot: dict) -> go.Figure | None:
+    """Construye una gráfica de línea de tiempo con las 7 etapas de la campaña.
 
     Args:
         snapshot: Diccionario con la información del snapshot de la campaña.
@@ -69,31 +76,21 @@ def construir_grafica_de_linea_de_tiempo(snapshot: dict) -> go.Figure | None:
     Returns:
         Figura de Plotly de tipo línea de tiempo (Gantt) o None si no hay etapas completas.
     """
-    etapas = [
-        ('Carga de artes', 'inicio_carga_artes', 'fin_carga_artes'),
-        ('Carga de preproyectos', 'inicio_carga_preproyectos', 'fin_carga_preproyectos'),
-        ('Aprobaciones', 'inicio_aprobaciones', 'fin_aprobaciones'),
-        ('Impresión', 'inicio_impresion', 'fin_impresion'),
-        ('Precampaña', 'inicio_precampana', 'fin_precampana'),
-        ('Pick & Pack', 'inicio_pick_pack', 'fin_pick_pack'),
-        ('Entregas', 'inicio_entregas', 'fin_entregas'),
-    ]
-
     nombres_etapas = []
     inicios = []
     fines = []
 
-    for nombre_etapa, clave_inicio, clave_fin in etapas:
+    for nombre_etapa, clave_inicio, clave_fin in ETAPAS:
         inicio_iso = snapshot.get(clave_inicio)
         fin_iso = snapshot.get(clave_fin)
-        
+
         if inicio_iso and fin_iso:
             try:
                 dt_inicio = datetime.fromisoformat(inicio_iso)
                 dt_fin = datetime.fromisoformat(fin_iso)
             except (ValueError, TypeError):
                 continue
-            
+
             inicios.append(dt_inicio)
             fines.append(dt_fin)
             nombres_etapas.append(nombre_etapa)
@@ -108,4 +105,78 @@ def construir_grafica_de_linea_de_tiempo(snapshot: dict) -> go.Figure | None:
 
     figura = px.timeline(datos, x_start='Inicio', x_end='Fin', y='Etapa')
     figura.update_yaxes(autorange='reversed')  # Para que la primera etapa aparezca arriba
+    return figura
+
+
+_COLORES_POR_RESPONSABLE = {
+    'FDA — Carga de artes y aprobaciones': '#fb7185',
+    'Tiempo muerto': '#9ca3af',
+    'Búho — Carga de preproyectos': '#38bdf8',
+    'Búho — Ejecución': '#1e3a8a',
+    'Entregas': '#22c55e',
+}
+
+
+def construir_grafica_por_responsable(snapshot: dict) -> go.Figure | None:
+    """Construye la línea de tiempo agrupada por responsable (FDA / Búho / Entregas).
+
+    Adaptación de `plot_timeline` del proyecto legacy: ese usaba hitos FDA granulares
+    que no existen en `SnapshotOut`, así que el bloque FDA aquí solo cubre
+    Carga de artes + Aprobaciones — sin el segmento "Planeación FDA" previo.
+
+    Args:
+        snapshot: Diccionario con la información del snapshot de la campaña.
+
+    Returns:
+        Figura de Plotly, o None si no hay ningún bloque con fechas completas.
+    """
+    def _fecha(clave: str) -> datetime | None:
+        valor = snapshot.get(clave)
+        if not valor:
+            return None
+        try:
+            return datetime.fromisoformat(valor)
+        except (ValueError, TypeError):
+            return None
+
+    inicio_artes = _fecha('inicio_carga_artes')
+    fin_aprob = _fecha('fin_aprobaciones')
+    carga_pre_inicio = _fecha('inicio_carga_preproyectos')
+    carga_pre_fin = _fecha('fin_carga_preproyectos')
+
+    inicio_ejecucion_buho = None
+    for clave in ('inicio_impresion', 'inicio_precampana', 'inicio_pick_pack'):
+        inicio_ejecucion_buho = _fecha(clave)
+        if inicio_ejecucion_buho is not None:
+            break
+    fin_ejecucion_buho = _fecha('fin_pick_pack')
+
+    ent_inicio = _fecha('inicio_entregas')
+    ent_fin = _fecha('fin_entregas')
+
+    grupos, inicios, fines, lineas = [], [], [], []
+
+    def _agregar(grupo: str, inicio: datetime | None, fin: datetime | None, linea: str) -> None:
+        if inicio is not None and fin is not None:
+            grupos.append(grupo)
+            inicios.append(inicio)
+            fines.append(fin)
+            lineas.append(linea)
+
+    _agregar('FDA — Carga de artes y aprobaciones', inicio_artes, fin_aprob, 'FDA')
+    _agregar('Búho — Carga de preproyectos', carga_pre_inicio, carga_pre_fin, 'Búho')
+    if fin_aprob is not None and inicio_ejecucion_buho is not None and inicio_ejecucion_buho > fin_aprob:
+        _agregar('Tiempo muerto', fin_aprob, inicio_ejecucion_buho, 'Búho')
+    _agregar('Búho — Ejecución', inicio_ejecucion_buho, fin_ejecucion_buho, 'Búho')
+    _agregar('Entregas', ent_inicio, ent_fin, 'Entregas')
+
+    if not grupos:
+        return None
+
+    datos = {'Grupo': grupos, 'Inicio': inicios, 'Fin': fines, 'Linea': lineas}
+    figura = px.timeline(
+        datos, x_start='Inicio', x_end='Fin', y='Linea', color='Grupo',
+        color_discrete_map=_COLORES_POR_RESPONSABLE,
+    )
+    figura.update_yaxes(categoryorder='array', categoryarray=['FDA', 'Búho', 'Entregas'], autorange='reversed')
     return figura

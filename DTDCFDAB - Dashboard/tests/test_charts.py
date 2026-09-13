@@ -24,7 +24,7 @@ def test_construir_grafica_de_percentil_usa_el_titulo_recibido():
     assert figura.layout.title.text == 'Cobertura de aviso (0.95)'
 
 
-def test_construir_grafica_de_linea_de_tiempo_con_todas_las_etapas():
+def test_construir_grafica_por_actividad_con_todas_las_etapas():
     snapshot = {
         'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': '2023-01-02T00:00:00',
         'inicio_carga_preproyectos': '2023-01-03T00:00:00', 'fin_carga_preproyectos': '2023-01-04T00:00:00',
@@ -34,26 +34,47 @@ def test_construir_grafica_de_linea_de_tiempo_con_todas_las_etapas():
         'inicio_pick_pack': '2023-01-11T00:00:00', 'fin_pick_pack': '2023-01-12T00:00:00',
         'inicio_entregas': '2023-01-13T00:00:00', 'fin_entregas': '2023-01-14T00:00:00',
     }
-    figura = charts.construir_grafica_de_linea_de_tiempo(snapshot)
+    figura = charts.construir_grafica_por_actividad(snapshot)
     assert figura is not None
-    # Each stage might be graphed, we check the length of the data trace or number of bars
     assert len(figura.data) > 0
 
 
-def test_construir_grafica_de_linea_de_tiempo_omite_incompletas():
+def test_construir_grafica_por_actividad_omite_incompletas():
     snapshot = {
         'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': '2023-01-02T00:00:00',
-        'inicio_carga_preproyectos': '2023-01-03T00:00:00', 'fin_carga_preproyectos': None, # Incomplete
+        'inicio_carga_preproyectos': '2023-01-03T00:00:00', 'fin_carga_preproyectos': None,
     }
-    figura = charts.construir_grafica_de_linea_de_tiempo(snapshot)
+    figura = charts.construir_grafica_por_actividad(snapshot)
     assert figura is not None
 
 
-def test_construir_grafica_de_linea_de_tiempo_vacio_retorna_none():
-    snapshot_vacio = {}
-    assert charts.construir_grafica_de_linea_de_tiempo(snapshot_vacio) is None
-    
-    snapshot_incompleto = {
-        'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': None,
+def test_construir_grafica_por_actividad_vacio_retorna_none():
+    assert charts.construir_grafica_por_actividad({}) is None
+    snapshot_incompleto = {'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': None}
+    assert charts.construir_grafica_por_actividad(snapshot_incompleto) is None
+
+
+def test_construir_grafica_por_responsable_con_los_3_bloques_completos():
+    snapshot = {
+        'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_aprobaciones': '2023-01-05T00:00:00',
+        'inicio_carga_preproyectos': '2023-01-02T00:00:00', 'fin_carga_preproyectos': '2023-01-03T00:00:00',
+        'inicio_impresion': '2023-01-06T00:00:00', 'fin_pick_pack': '2023-01-10T00:00:00',
+        'inicio_entregas': '2023-01-11T00:00:00', 'fin_entregas': '2023-01-15T00:00:00',
     }
-    assert charts.construir_grafica_de_linea_de_tiempo(snapshot_incompleto) is None
+    figura = charts.construir_grafica_por_responsable(snapshot)
+    assert figura is not None
+    assert len(figura.data) > 0
+
+
+def test_construir_grafica_por_responsable_agrega_tiempo_muerto_si_hay_hueco():
+    snapshot = {
+        'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_aprobaciones': '2023-01-05T00:00:00',
+        'inicio_impresion': '2023-01-10T00:00:00', 'fin_pick_pack': '2023-01-15T00:00:00',
+    }
+    figura = charts.construir_grafica_por_responsable(snapshot)
+    nombres_de_trazo = [traza.name for traza in figura.data]
+    assert 'Tiempo muerto' in nombres_de_trazo
+
+
+def test_construir_grafica_por_responsable_vacio_retorna_none():
+    assert charts.construir_grafica_por_responsable({}) is None
