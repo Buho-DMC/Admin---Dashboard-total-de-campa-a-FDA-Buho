@@ -37,11 +37,11 @@ def main() -> None:
 
     navegacion = st.navigation(
         [
-            st.Page('pages/campanas.py', title='Campañas', icon='📋', default=True),
-            st.Page('pages/alta_de_campana.py', title='Alta de campaña', icon='➕'),
-            st.Page('pages/detalle_de_campana.py', title='Detalle de campaña', icon='🔍'),
-            st.Page('pages/metodologia.py', title='Metodología', icon='📐'),
-            st.Page('pages/jobs.py', title='Jobs', icon='⚙️'),
+            st.Page('views/campanas.py', title='Campañas', icon='📋', default=True),
+            st.Page('views/alta_de_campana.py', title='Alta de campaña', icon='➕'),
+            st.Page('views/detalle_de_campana.py', title='Detalle de campaña', icon='🔍'),
+            st.Page('views/metodologia.py', title='Metodología', icon='📐'),
+            st.Page('views/jobs.py', title='Jobs', icon='⚙️'),
         ]
     )
     navegacion.run()

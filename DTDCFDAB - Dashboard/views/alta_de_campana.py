@@ -64,4 +64,4 @@ if enviado:
         st.success(f"Campaña '{resultado['campana']['nombre']}' creada.")
         st.session_state['id_job_seleccionado'] = resultado['job']['id_job_ejecucion']
         if st.button('Ver progreso del job'):
-            st.switch_page('pages/jobs.py')
+            st.switch_page('views/jobs.py')

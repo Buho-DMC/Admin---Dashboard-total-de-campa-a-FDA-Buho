@@ -37,3 +37,12 @@ def test_gate_permite_acceso_con_contrasena_correcta(monkeypatch):
     app_test.button[0].click().run()
 
     assert app_test.session_state['autenticado'] is True
+
+
+def test_no_existe_la_carpeta_pages_auto_registrada_por_streamlit():
+    # Streamlit auto-registra cualquier carpeta llamada literalmente `pages/` como
+    # rutas navegables, saltándose el gate de PIN de este mismo archivo (ver
+    # discovery.md §A). Esta prueba evita que alguien la reintroduzca sin querer.
+    from pathlib import Path
+
+    assert not Path('pages').is_dir()

@@ -11,7 +11,7 @@ def test_campanas_muestra_error_si_la_api_falla(monkeypatch):
 
     monkeypatch.setattr(api_client, 'list_snapshots_vigentes', _lanza_error)
 
-    app_test = AppTest.from_file('pages/campanas.py')
+    app_test = AppTest.from_file('views/campanas.py')
     app_test.run()
 
     assert len(app_test.error) == 1
@@ -22,7 +22,7 @@ def test_campanas_muestra_error_si_la_api_falla(monkeypatch):
 def test_campanas_muestra_mensaje_si_no_hay_snapshots(monkeypatch):
     monkeypatch.setattr(api_client, 'list_snapshots_vigentes', lambda: [])
 
-    app_test = AppTest.from_file('pages/campanas.py')
+    app_test = AppTest.from_file('views/campanas.py')
     app_test.run()
 
     assert len(app_test.info) == 1
@@ -43,7 +43,7 @@ def test_campanas_muestra_tabla_y_boton_de_alta(monkeypatch):
         ],
     )
 
-    app_test = AppTest.from_file('pages/campanas.py')
+    app_test = AppTest.from_file('views/campanas.py')
     app_test.run()
 
     assert len(app_test.dataframe) == 1

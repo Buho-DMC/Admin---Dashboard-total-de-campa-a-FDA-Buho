@@ -180,7 +180,7 @@ def _mostrar_parametros_y_guardar(configuracion_vigente: dict) -> None:
             st.success(f"Configuración guardada. Recalculando {resultado['total_campanas']} campañas.")
             st.session_state['id_lote_seleccionado'] = resultado['id_lote']
             if st.button('Ver progreso del recálculo'):
-                st.switch_page('pages/jobs.py')
+                st.switch_page('views/jobs.py')
 
 
 _mostrar_parametros_y_guardar(configuracion_vigente)

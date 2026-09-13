@@ -20,21 +20,21 @@ def _preparar(monkeypatch, campanas=None, snapshot=None, job=None):
 
 def test_detalle_muestra_mensaje_si_no_hay_campanas(monkeypatch):
     _preparar(monkeypatch, campanas=[])
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     assert len(app_test.info) == 1
 
 
 def test_detalle_muestra_info_si_snapshot_no_calculado(monkeypatch):
     _preparar(monkeypatch, snapshot=None)
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     assert any('Aún no se ha calculado' in mensaje.value for mensaje in app_test.info)
 
 
 def test_detalle_muestra_snapshot_cuando_existe(monkeypatch):
     _preparar(monkeypatch, snapshot={'numero_envios': 100, 'porcentaje_alcanzado_entregas': 0.85})
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     assert len(app_test.json) == 1
     metric_envios = next(m for m in app_test.metric if getattr(m, 'label', '') == 'Envíos')
@@ -52,7 +52,7 @@ def test_detalle_renderiza_grafica_cuando_hay_etapas_completas(monkeypatch):
         'inicio_entregas': '2023-01-13T00:00:00', 'fin_entregas': '2023-01-14T00:00:00',
     }
     _preparar(monkeypatch, snapshot=snapshot_completo)
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     # Use get('plotly_chart') to check if rendered safely regardless of streamlit version
     assert len(app_test.get('plotly_chart')) == 1
@@ -62,7 +62,7 @@ def test_detalle_renderiza_grafica_cuando_hay_etapas_completas(monkeypatch):
 
 def test_detalle_muestra_info_cuando_no_hay_etapas_completas(monkeypatch):
     _preparar(monkeypatch, snapshot={})
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     assert any('Todavía no hay etapas con fecha de inicio y fin.' in info.value for info in app_test.info)
     assert len(app_test.get('plotly_chart')) == 0
@@ -70,7 +70,7 @@ def test_detalle_muestra_info_cuando_no_hay_etapas_completas(monkeypatch):
 
 def test_detalle_usa_campana_preseleccionada(monkeypatch):
     _preparar(monkeypatch)
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.session_state['id_campana_seleccionada'] = 1
     app_test.run()
     assert app_test.selectbox[0].value == 1
@@ -78,14 +78,14 @@ def test_detalle_usa_campana_preseleccionada(monkeypatch):
 
 def test_detalle_muestra_el_error_del_job_fallido(monkeypatch):
     _preparar(monkeypatch, job={'estado': 'fallido', 'error': 'Claw no devolvió escaneos de Pick & Pack.'})
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     assert any('Claw no devolvió escaneos de Pick & Pack.' in mensaje.value for mensaje in app_test.error)
 
 
 def test_detalle_boton_de_borrar_deshabilitado_sin_confirmar(monkeypatch):
     _preparar(monkeypatch)
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     boton_borrar = next(boton for boton in app_test.button if boton.label == 'Borrar campaña')
     assert boton_borrar.disabled is True
@@ -95,7 +95,7 @@ def test_detalle_borra_la_campana_al_confirmar(monkeypatch):
     _preparar(monkeypatch)
     llamadas_a_borrar = []
     monkeypatch.setattr(api_client, 'borrar_campana', lambda id_campana: llamadas_a_borrar.append(id_campana))
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     app_test.checkbox[0].check().run()
     boton_borrar = next(boton for boton in app_test.button if boton.label == 'Borrar campaña')
@@ -106,7 +106,7 @@ def test_detalle_borra_la_campana_al_confirmar(monkeypatch):
 
 def test_detalle_no_muestra_error_si_el_job_no_fallo(monkeypatch):
     _preparar(monkeypatch, job={'estado': 'exitoso', 'error': None})
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     assert len(app_test.error) == 0
 
@@ -119,7 +119,7 @@ def test_detalle_guarda_la_fecha_de_un_hito_al_confirmar(monkeypatch):
         'upsert_evento_de_campana',
         lambda id_campana, codigo_evento, fecha: llamadas_guardadas.append((id_campana, codigo_evento, fecha)),
     )
-    app_test = AppTest.from_file('pages/detalle_de_campana.py')
+    app_test = AppTest.from_file('views/detalle_de_campana.py')
     app_test.run()
     app_test.date_input[0].set_value(date(2026, 9, 15))
     boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar Arte aprobado')
@@ -131,7 +131,7 @@ def test_detalle_guarda_la_fecha_de_un_hito_al_confirmar(monkeypatch):
 
 
 def test_formatear_metrica():
-    from pages.detalle_de_campana import _formatear_metrica
+    from views.detalle_de_campana import _formatear_metrica
     # Manejo de None
     assert _formatear_metrica(None) == 'Sin dato'
     assert _formatear_metrica(None, formato='.2f', usar_pct=True) == 'Sin dato'

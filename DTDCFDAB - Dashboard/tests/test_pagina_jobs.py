@@ -22,7 +22,7 @@ def _capturar_texto_de_progreso(monkeypatch):
 
 def test_jobs_muestra_info_sin_id_de_lote(monkeypatch):
     _sin_autorefresh(monkeypatch)
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     assert len(app_test.info) == 1
 
@@ -37,7 +37,7 @@ def test_jobs_muestra_activos_sin_pedir_id_ni_lote(monkeypatch):
             {'id_job_ejecucion': 2, 'id_campana': 2, 'tipo': 'recalculo', 'estado': 'corriendo'},
         ],
     )
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     app_test.radio[0].set_value('Activos ahora').run()
     assert len(app_test.exception) == 0
@@ -53,7 +53,7 @@ def test_jobs_activos_reintenta_todos_los_fallidos_al_confirmar(monkeypatch):
         'reintentar_fallidos',
         lambda: llamadas_a_reintentar_fallidos.append(1) or {'total_reintentados': 2},
     )
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     app_test.radio[0].set_value('Activos ahora').run()
     boton_reintentar_fallidos = next(boton for boton in app_test.button if boton.label == 'Reintentar fallidos')
@@ -73,7 +73,7 @@ def test_jobs_muestra_progreso_por_lote(monkeypatch):
             {'id_job_ejecucion': 2, 'id_campana': 2, 'estado': 'corriendo'},
         ],
     )
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     app_test.text_input[0].set_value('lote-1').run()
     assert len(llamadas_de_progreso) == 1
@@ -86,7 +86,7 @@ def test_jobs_muestra_progreso_por_job_individual(monkeypatch):
     monkeypatch.setattr(
         api_client, 'get_job', lambda id_job: {'id_job_ejecucion': 9, 'id_campana': 3, 'estado': 'exitoso'}
     )
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     app_test.radio[0].set_value('Job individual (alta de campaña)').run()
     assert len(llamadas_de_progreso) == 1
@@ -103,7 +103,7 @@ def test_jobs_muestra_boton_de_reintentar_solo_para_fallidos(monkeypatch):
             {'id_job_ejecucion': 2, 'id_campana': 2, 'estado': 'exitoso'},
         ],
     )
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     app_test.text_input[0].set_value('lote-1').run()
     etiquetas_de_botones = [boton.label for boton in app_test.button]
@@ -120,7 +120,7 @@ def test_jobs_reintenta_al_hacer_click(monkeypatch):
     llamadas_a_reintentar = []
     monkeypatch.setattr(api_client, 'reintentar_job', lambda id_job: llamadas_a_reintentar.append(id_job))
 
-    app_test = AppTest.from_file('pages/jobs.py')
+    app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     app_test.text_input[0].set_value('lote-1').run()
     boton_reintentar = next(boton for boton in app_test.button if boton.label == 'Reintentar')

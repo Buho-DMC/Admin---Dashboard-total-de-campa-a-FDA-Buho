@@ -27,7 +27,7 @@ st.dataframe(
 for snapshot in snapshots_vigentes:
     if st.button(f"Ver detalle — campaña {snapshot['id_campana']}", key=f"ver_detalle_{snapshot['id_campana']}"):
         st.session_state['id_campana_seleccionada'] = snapshot['id_campana']
-        st.switch_page('pages/detalle_de_campana.py')
+        st.switch_page('views/detalle_de_campana.py')
 
 if st.button('Dar de alta una campaña nueva'):
-    st.switch_page('pages/alta_de_campana.py')
+    st.switch_page('views/alta_de_campana.py')
