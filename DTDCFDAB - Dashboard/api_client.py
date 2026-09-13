@@ -197,6 +197,15 @@ def list_jobs_activos() -> list[dict]:
     return _realizar_peticion('GET', '/jobs/activos').json()
 
 
+def get_resumen_jobs() -> list[dict]:
+    """Resumen de jobs para vista consolidada.
+
+    Returns:
+        Lista de dicts (activos, fallidos vigentes y últimos exitosos).
+    """
+    return _realizar_peticion('GET', '/jobs/resumen').json()
+
+
 def reintentar_fallidos() -> dict:
     """Reintenta, de una sola vez, todos los jobs fallidos que siguen vigentes.
 

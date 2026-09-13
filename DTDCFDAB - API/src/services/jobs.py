@@ -236,6 +236,27 @@ def list_jobs_fallidos_vigentes(engine: Engine) -> list[dict]:
         return [dict(row._mapping) for row in result_rows]
 
 
+def list_ultimos_exitosos(engine: Engine, limite: int = 10) -> list[dict]:
+    """Últimos jobs en estado `exitoso`, más reciente primero.
+
+    Args:
+        engine: engine de SQLAlchemy.
+        limite: cuántos jobs exitosos regresar como máximo.
+
+    Returns:
+        Lista de dicts, ordenada por `id_job_ejecucion` descendente.
+    """
+    with engine.connect() as connection:
+        result_rows = connection.execute(
+            text(
+                f"SELECT {COLUMNAS_JOB} FROM dtdcfdab_job_ejecucion "
+                "WHERE estado = 'exitoso' ORDER BY id_job_ejecucion DESC LIMIT :limite"
+            ),
+            {'limite': limite},
+        )
+        return [dict(row._mapping) for row in result_rows]
+
+
 def reintentar_fallidos(engine: Engine, tasks_client: tasks_v2.CloudTasksClient) -> int:
     """Reintenta, de una sola vez, todos los jobs fallidos que siguen vigentes.
 

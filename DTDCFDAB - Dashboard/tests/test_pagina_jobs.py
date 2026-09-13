@@ -1,4 +1,4 @@
-"""Tests de pages/jobs.py."""
+"""Tests de views/jobs.py."""
 
 import streamlit
 from streamlit.testing.v1 import AppTest
@@ -10,28 +10,22 @@ def _sin_autorefresh(monkeypatch):
     monkeypatch.setattr('streamlit_autorefresh.st_autorefresh', lambda **kwargs: 0)
 
 
-def _capturar_texto_de_progreso(monkeypatch):
-    # AppTest (streamlit 1.58) no modela st.progress como elemento
-    # introspeccionable — element_tree.py no lo registra en absoluto, a
-    # diferencia de otros widgets. Se intercepta la llamada real para
-    # capturar su parametro `text` sin tocar el codigo de produccion.
-    llamadas_de_progreso = []
-    monkeypatch.setattr(streamlit, 'progress', lambda valor, text=None: llamadas_de_progreso.append(text))
-    return llamadas_de_progreso
-
-
-def test_jobs_muestra_info_sin_id_de_lote(monkeypatch):
+def test_jobs_muestra_info_y_botones(monkeypatch):
     _sin_autorefresh(monkeypatch)
+    monkeypatch.setattr(api_client, 'get_resumen_jobs', lambda: [])
     app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
     assert len(app_test.info) == 1
+    etiquetas_botones = [boton.label for boton in app_test.button]
+    assert 'Actualizar estado' in etiquetas_botones
+    assert 'Reintentar fallidos' in etiquetas_botones
 
 
-def test_jobs_muestra_activos_sin_pedir_id_ni_lote(monkeypatch):
+def test_jobs_muestra_resumen_en_tabla_fija(monkeypatch):
     _sin_autorefresh(monkeypatch)
     monkeypatch.setattr(
         api_client,
-        'list_jobs_activos',
+        'get_resumen_jobs',
         lambda: [
             {'id_job_ejecucion': 1, 'id_campana': 1, 'tipo': 'alta', 'estado': 'pendiente'},
             {'id_job_ejecucion': 2, 'id_campana': 2, 'tipo': 'recalculo', 'estado': 'corriendo'},
@@ -39,14 +33,15 @@ def test_jobs_muestra_activos_sin_pedir_id_ni_lote(monkeypatch):
     )
     app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
-    app_test.radio[0].set_value('Activos ahora').run()
     assert len(app_test.exception) == 0
     assert len(app_test.dataframe) == 1
+    # st.dataframe no expone los datos crudos en AppTest de la misma forma que table,
+    # pero nos aseguramos que se renderice sin errores.
 
 
-def test_jobs_activos_reintenta_todos_los_fallidos_al_confirmar(monkeypatch):
+def test_jobs_reintenta_todos_los_fallidos(monkeypatch):
     _sin_autorefresh(monkeypatch)
-    monkeypatch.setattr(api_client, 'list_jobs_activos', lambda: [])
+    monkeypatch.setattr(api_client, 'get_resumen_jobs', lambda: [])
     llamadas_a_reintentar_fallidos = []
     monkeypatch.setattr(
         api_client,
@@ -55,76 +50,65 @@ def test_jobs_activos_reintenta_todos_los_fallidos_al_confirmar(monkeypatch):
     )
     app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
-    app_test.radio[0].set_value('Activos ahora').run()
     boton_reintentar_fallidos = next(boton for boton in app_test.button if boton.label == 'Reintentar fallidos')
     boton_reintentar_fallidos.click().run()
     assert len(llamadas_a_reintentar_fallidos) == 1
     assert len(app_test.success) == 1
 
 
-def test_jobs_muestra_progreso_por_lote(monkeypatch):
+def test_jobs_actualiza_estado(monkeypatch):
     _sin_autorefresh(monkeypatch)
-    llamadas_de_progreso = _capturar_texto_de_progreso(monkeypatch)
-    monkeypatch.setattr(
-        api_client,
-        'list_jobs_de_lote',
-        lambda id_lote: [
-            {'id_job_ejecucion': 1, 'id_campana': 1, 'estado': 'exitoso'},
-            {'id_job_ejecucion': 2, 'id_campana': 2, 'estado': 'corriendo'},
-        ],
-    )
+    monkeypatch.setattr(api_client, 'get_resumen_jobs', lambda: [])
     app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
-    app_test.text_input[0].set_value('lote-1').run()
-    assert len(llamadas_de_progreso) == 1
-    assert '1 de 2' in llamadas_de_progreso[0]
-
-
-def test_jobs_muestra_progreso_por_job_individual(monkeypatch):
-    _sin_autorefresh(monkeypatch)
-    llamadas_de_progreso = _capturar_texto_de_progreso(monkeypatch)
-    monkeypatch.setattr(
-        api_client, 'get_job', lambda id_job: {'id_job_ejecucion': 9, 'id_campana': 3, 'estado': 'exitoso'}
-    )
-    app_test = AppTest.from_file('views/jobs.py')
-    app_test.run()
-    app_test.radio[0].set_value('Job individual (alta de campaña)').run()
-    assert len(llamadas_de_progreso) == 1
-    assert '1 de 1' in llamadas_de_progreso[0]
+    boton_actualizar = next(boton for boton in app_test.button if boton.label == 'Actualizar estado')
+    boton_actualizar.click().run()
+    assert len(app_test.exception) == 0
 
 
 def test_jobs_muestra_boton_de_reintentar_solo_para_fallidos(monkeypatch):
     _sin_autorefresh(monkeypatch)
     monkeypatch.setattr(
         api_client,
-        'list_jobs_de_lote',
-        lambda id_lote: [
+        'get_resumen_jobs',
+        lambda: [
             {'id_job_ejecucion': 1, 'id_campana': 1, 'estado': 'fallido'},
             {'id_job_ejecucion': 2, 'id_campana': 2, 'estado': 'exitoso'},
         ],
     )
     app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
-    app_test.text_input[0].set_value('lote-1').run()
     etiquetas_de_botones = [boton.label for boton in app_test.button]
+    # 'Actualizar estado', 'Reintentar fallidos', y un 'Reintentar' por fila fallida
     assert etiquetas_de_botones.count('Reintentar') == 1
 
 
-def test_jobs_reintenta_al_hacer_click(monkeypatch):
+def test_jobs_reintenta_al_hacer_click_en_reintentar_individual(monkeypatch):
     _sin_autorefresh(monkeypatch)
     monkeypatch.setattr(
         api_client,
-        'list_jobs_de_lote',
-        lambda id_lote: [{'id_job_ejecucion': 1, 'id_campana': 1, 'estado': 'fallido'}],
+        'get_resumen_jobs',
+        lambda: [{'id_job_ejecucion': 1, 'id_campana': 1, 'estado': 'fallido'}],
     )
     llamadas_a_reintentar = []
     monkeypatch.setattr(api_client, 'reintentar_job', lambda id_job: llamadas_a_reintentar.append(id_job))
 
     app_test = AppTest.from_file('views/jobs.py')
     app_test.run()
-    app_test.text_input[0].set_value('lote-1').run()
     boton_reintentar = next(boton for boton in app_test.button if boton.label == 'Reintentar')
     boton_reintentar.click().run()
 
     assert llamadas_a_reintentar == [1]
     assert len(app_test.success) == 1
+
+
+def test_jobs_muestra_error_si_falla_la_api(monkeypatch):
+    _sin_autorefresh(monkeypatch)
+
+    def lanza_error():
+        raise RuntimeError('Error de la API')
+
+    monkeypatch.setattr(api_client, 'get_resumen_jobs', lanza_error)
+    app_test = AppTest.from_file('views/jobs.py')
+    app_test.run()
+    assert len(app_test.error) == 1

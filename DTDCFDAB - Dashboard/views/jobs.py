@@ -1,4 +1,4 @@
-"""Progreso de jobs: búsqueda por lote (recálculo global) o por job individual (alta), con auto-refresh."""
+"""Bandeja de jobs: activos, fallidos e historial reciente, con auto-refresh."""
 
 import streamlit as st
 from streamlit_autorefresh import st_autorefresh
@@ -6,83 +6,56 @@ from streamlit_autorefresh import st_autorefresh
 import api_client
 
 st.title('Jobs')
-
 st_autorefresh(interval=30_000, key='autorefresh_jobs')
 
-id_lote_preseleccionado = st.session_state.get('id_lote_seleccionado', '')
-id_job_preseleccionado = st.session_state.get('id_job_seleccionado')
-
-modo_de_busqueda = st.radio(
-    'Buscar por', ['Lote (recálculo global)', 'Job individual (alta de campaña)', 'Activos ahora']
-)
-
-if st.button('Actualizar estado'):
+columna_actualizar, columna_reintentar = st.columns(2)
+if columna_actualizar.button('Actualizar estado'):
     st.rerun()
 
-jobs_a_mostrar = []
-if modo_de_busqueda == 'Activos ahora':
+if columna_reintentar.button('Reintentar fallidos'):
     try:
-        jobs_activos = api_client.list_jobs_activos()
+        resultado_reintento = api_client.reintentar_fallidos()
     except Exception as error:
-        st.error('No se pudo obtener los jobs activos.')
+        st.error('No se pudo reintentar los jobs fallidos.')
         with st.expander('Detalles técnicos'):
             st.exception(error)
-        st.stop()
-    if st.button('Reintentar fallidos'):
-        try:
-            resultado_reintento = api_client.reintentar_fallidos()
-        except Exception as error:
-            st.error('No se pudo reintentar los jobs fallidos.')
-            with st.expander('Detalles técnicos'):
-                st.exception(error)
-        else:
-            st.success(f"Se reencolaron {resultado_reintento['total_reintentados']} jobs.")
+    else:
+        st.success(f"Se reencolaron {resultado_reintento['total_reintentados']} jobs.")
 
-    if not jobs_activos:
-        st.info('No hay jobs pendientes ni corriendo en este momento.')
-        st.stop()
-    st.dataframe(jobs_activos, hide_index=True)
-    st.stop()
-elif modo_de_busqueda == 'Lote (recálculo global)':
-    id_lote = st.text_input('Id de lote', value=id_lote_preseleccionado)
-    if not id_lote:
-        st.info('Escribe un id de lote para ver el progreso de sus jobs.')
-        st.stop()
-    try:
-        jobs_a_mostrar = api_client.list_jobs_de_lote(id_lote)
-    except Exception as error:
-        st.error('No se pudo obtener el progreso de los jobs.')
-        with st.expander('Detalles técnicos'):
-            st.exception(error)
-        st.stop()
-else:
-    id_job = st.number_input('Id de job', min_value=1, value=id_job_preseleccionado or 1, step=1)
-    try:
-        jobs_a_mostrar = [api_client.get_job(int(id_job))]
-    except Exception as error:
-        st.error('No se pudo obtener el job.')
-        with st.expander('Detalles técnicos'):
-            st.exception(error)
-        st.stop()
-
-if not jobs_a_mostrar:
-    st.info('No se encontraron jobs.')
+try:
+    resumen_jobs = api_client.get_resumen_jobs()
+except Exception as error:
+    st.error('No se pudo obtener el resumen de jobs.')
+    with st.expander('Detalles técnicos'):
+        st.exception(error)
     st.stop()
 
-total_de_jobs = len(jobs_a_mostrar)
-jobs_listos = sum(1 for job in jobs_a_mostrar if job['estado'] in ('exitoso', 'fallido'))
-st.progress(jobs_listos / total_de_jobs, text=f'{jobs_listos} de {total_de_jobs} listas')
+if not resumen_jobs:
+    st.info('No hay jobs en el resumen (la base de datos está vacía o sin actividad).')
+    st.stop()
 
-for job in jobs_a_mostrar:
-    columna_estado, columna_accion = st.columns([3, 1])
-    columna_estado.write(f"Campaña {job['id_campana']} — {job['estado']}")
+st.dataframe(resumen_jobs, hide_index=True)
+
+# Los botones individuales de reintento ahora operan sobre la misma lista que la tabla.
+# st.dataframe no tiene botones embebidos, se renderizan abajo temporalmente para no
+# perder la capacidad de reintento individual sin tener que meter AG Grid u otras dependencias.
+st.subheader('Reintentos individuales')
+hay_fallidos = False
+for job in resumen_jobs:
     if job['estado'] == 'fallido':
-        if columna_accion.button('Reintentar', key=f"reintentar_{job['id_job_ejecucion']}"):
+        hay_fallidos = True
+        columna_texto, columna_boton = st.columns([3, 1])
+        columna_texto.write(f"Campaña {job['id_campana']} (Job {job['id_job_ejecucion']}): falló.")
+        if columna_boton.button('Reintentar', key=f"reintentar_{job['id_job_ejecucion']}"):
             try:
                 api_client.reintentar_job(job['id_job_ejecucion'])
             except Exception as error:
-                st.error('No se pudo reintentar el job.')
+                st.error(f"No se pudo reintentar el job {job['id_job_ejecucion']}.")
                 with st.expander('Detalles técnicos'):
                     st.exception(error)
             else:
-                st.success('Job reencolado.')
+                st.success(f"Job {job['id_job_ejecucion']} reencolado.")
+                st.rerun()
+
+if not hay_fallidos:
+    st.write('No hay jobs fallidos vigentes.')

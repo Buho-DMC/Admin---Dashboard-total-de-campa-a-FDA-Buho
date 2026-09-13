@@ -15,6 +15,7 @@ from src.services.jobs import (
     get_ultimo_job_de_campana,
     list_jobs_activos,
     list_jobs_por_lote,
+    list_ultimos_exitosos,
     reintentar,
     reintentar_fallidos,
 )
@@ -338,3 +339,33 @@ def test_ejecutar_job_recalcula_campana_ya_calculada_actualiza_en_vez_de_fallar(
     assert len(filas_del_snapshot) == 1
     assert filas_del_snapshot[0]['numero_envios'] == 20
     assert filas_del_snapshot[0]['numero_folios'] == 8
+
+
+def test_list_ultimos_exitosos_regresa_solo_exitosos_mas_recientes_primero(engine):
+    id_campana, id_configuracion = _sembrar_campana_y_configuracion(engine)
+    job_1 = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    job_2 = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    job_3 = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+    _marcar_exitoso(engine, job_1['id_job_ejecucion'])
+    _marcar_exitoso(engine, job_3['id_job_ejecucion'])
+    # job_2 queda pendiente -- no debe aparecer
+
+    resultado = list_ultimos_exitosos(engine)
+
+    ids_regresados = [job['id_job_ejecucion'] for job in resultado]
+    assert ids_regresados == [job_3['id_job_ejecucion'], job_1['id_job_ejecucion']]
+
+
+def test_list_ultimos_exitosos_respeta_el_limite(engine):
+    id_campana, id_configuracion = _sembrar_campana_y_configuracion(engine)
+    ids_creados = []
+    for _ in range(3):
+        job = crear_job(engine, id_campana=id_campana, id_configuracion=id_configuracion, tipo='alta')
+        _marcar_exitoso(engine, job['id_job_ejecucion'])
+        ids_creados.append(job['id_job_ejecucion'])
+
+    resultado = list_ultimos_exitosos(engine, limite=2)
+
+    assert len(resultado) == 2
+    assert [job['id_job_ejecucion'] for job in resultado] == sorted(ids_creados, reverse=True)[:2]
+

@@ -58,6 +58,34 @@ def test_get_jobs_activos_ok(monkeypatch):
     assert len(response.json()) == 1
 
 
+def test_get_jobs_resumen_ok(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
+    with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.jobs.jobs.list_jobs_activos', return_value=[JOB_DE_EJEMPLO]), \
+         patch('src.routers.jobs.jobs.list_jobs_fallidos_vigentes', return_value=[]), \
+         patch('src.routers.jobs.jobs.list_ultimos_exitosos', return_value=[]):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.get('/jobs/resumen', headers=HEADERS)
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_get_jobs_resumen_concatena_los_3_grupos_en_orden(monkeypatch):
+    monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
+    job_activo = {**JOB_DE_EJEMPLO, 'id_job_ejecucion': 1, 'estado': 'corriendo'}
+    job_fallido = {**JOB_DE_EJEMPLO, 'id_job_ejecucion': 2, 'estado': 'fallido'}
+    job_exitoso = {**JOB_DE_EJEMPLO, 'id_job_ejecucion': 3, 'estado': 'exitoso'}
+    with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
+         patch('src.routers.jobs.jobs.list_jobs_activos', return_value=[job_activo]), \
+         patch('src.routers.jobs.jobs.list_jobs_fallidos_vigentes', return_value=[job_fallido]), \
+         patch('src.routers.jobs.jobs.list_ultimos_exitosos', return_value=[job_exitoso]):
+        mock_get_db_engine.return_value.dispose = lambda: None
+        response = client.get('/jobs/resumen', headers=HEADERS)
+    assert response.status_code == 200
+    ids_en_orden = [job['id_job_ejecucion'] for job in response.json()]
+    assert ids_en_orden == [1, 2, 3]
+
+
 def test_post_jobs_reintentar_fallidos_ok(monkeypatch):
     monkeypatch.setattr(config, 'API_KEY_DTDC_FDA_BUHO', 'secreto')
     with patch('src.routers.jobs.clients.get_db_engine') as mock_get_db_engine, \
