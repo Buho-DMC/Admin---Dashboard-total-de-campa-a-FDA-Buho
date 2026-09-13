@@ -100,3 +100,15 @@ def test_jobs_reintenta_al_hacer_click_en_reintentar_individual(monkeypatch):
 
     assert llamadas_a_reintentar == [1]
     assert len(app_test.success) == 1
+
+
+def test_jobs_muestra_error_si_falla_la_api(monkeypatch):
+    _sin_autorefresh(monkeypatch)
+
+    def lanza_error():
+        raise RuntimeError('Error de la API')
+
+    monkeypatch.setattr(api_client, 'get_resumen_jobs', lanza_error)
+    app_test = AppTest.from_file('views/jobs.py')
+    app_test.run()
+    assert len(app_test.error) == 1
