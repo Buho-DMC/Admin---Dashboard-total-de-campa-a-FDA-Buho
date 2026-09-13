@@ -39,7 +39,6 @@ def main() -> None:
         [
             st.Page('views/campanas.py', title='Campañas', icon='📋', default=True),
             st.Page('views/alta_de_campana.py', title='Alta de campaña', icon='➕'),
-            st.Page('views/detalle_de_campana.py', title='Detalle de campaña', icon='🔍'),
             st.Page('views/metodologia.py', title='Metodología', icon='📐'),
             st.Page('views/jobs.py', title='Jobs', icon='⚙️'),
         ]
