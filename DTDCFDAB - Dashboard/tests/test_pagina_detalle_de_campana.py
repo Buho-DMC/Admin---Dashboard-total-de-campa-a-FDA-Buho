@@ -71,6 +71,7 @@ def test_detalle_muestra_info_cuando_no_hay_etapas_completas(monkeypatch):
 def test_detalle_usa_campana_preseleccionada(monkeypatch):
     _preparar(monkeypatch)
     app_test = AppTest.from_file('views/detalle_de_campana.py')
+    monkeypatch.setattr('streamlit_autorefresh.st_autorefresh', lambda **kwargs: 0)
     app_test.session_state['id_campana_seleccionada'] = 1
     app_test.run()
     assert app_test.selectbox[0].value == 1

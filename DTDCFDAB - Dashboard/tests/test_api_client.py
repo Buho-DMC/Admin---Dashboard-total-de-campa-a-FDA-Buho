@@ -224,6 +224,15 @@ def test_list_jobs_activos_pide_la_ruta_correcta(monkeypatch):
     assert rutas_capturadas == ['/jobs/activos']
 
 
+def test_get_resumen_jobs_pide_la_ruta_correcta(monkeypatch):
+    rutas_capturadas = []
+    monkeypatch.setattr(
+        api_client, '_realizar_peticion', lambda metodo, ruta, **kwargs: rutas_capturadas.append(ruta) or _RespuestaFalsa([])
+    )
+    api_client.get_resumen_jobs()
+    assert rutas_capturadas == ['/jobs/resumen']
+
+
 def test_borrar_campana_pide_delete_a_la_ruta_correcta(monkeypatch):
     peticiones_capturadas = []
     monkeypatch.setattr(
