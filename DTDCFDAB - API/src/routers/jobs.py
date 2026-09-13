@@ -30,6 +30,26 @@ def get_jobs_activos() -> list[dict]:
         engine.dispose()
 
 
+@router.get('/jobs/resumen', response_model=list[JobOut])
+def get_jobs_resumen() -> list[dict]:
+    """Resumen de jobs para monitoreo: activos, fallidos vigentes y últimos 10 exitosos.
+
+    Returns:
+        Lista concatenada de `JobOut`, en este orden: activos
+        (`pendiente`/`corriendo`), fallidos vigentes, y los últimos 10 con
+        estado `exitoso`.
+    """
+    engine = clients.get_db_engine()
+    try:
+        return [
+            *jobs.list_jobs_activos(engine),
+            *jobs.list_jobs_fallidos_vigentes(engine),
+            *jobs.list_ultimos_exitosos(engine, limite=10),
+        ]
+    finally:
+        engine.dispose()
+
+
 @router.get('/jobs/{id_job_ejecucion}', response_model=JobOut)
 def get_job(id_job_ejecucion: int) -> dict:
     """Obtiene el estado de un job.
