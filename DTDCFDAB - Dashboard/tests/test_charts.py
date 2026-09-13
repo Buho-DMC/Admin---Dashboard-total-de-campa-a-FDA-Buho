@@ -78,3 +78,17 @@ def test_construir_grafica_por_responsable_agrega_tiempo_muerto_si_hay_hueco():
 
 def test_construir_grafica_por_responsable_vacio_retorna_none():
     assert charts.construir_grafica_por_responsable({}) is None
+
+
+def test_construir_grafica_de_percentiles_combinada_dibuja_una_linea_por_corte():
+    figura = charts.construir_grafica_de_percentiles_combinada(
+        {'Porcentaje inicio': 0.01, 'Porcentaje fin': 0.99, 'Cobertura de aviso': 0.95}
+    )
+    lineas_verticales = figura.layout.shapes
+    assert len(lineas_verticales) == 3
+
+
+def test_construir_grafica_de_percentiles_combinada_incluye_la_curva_base():
+    figura = charts.construir_grafica_de_percentiles_combinada({'Porcentaje fin': 0.99})
+    assert figura.data[0].name == 'Distribución ilustrativa'
+    assert len(figura.data[0].x) > 0

@@ -180,3 +180,34 @@ def construir_grafica_por_responsable(snapshot: dict) -> go.Figure | None:
     )
     figura.update_yaxes(categoryorder='array', categoryarray=['FDA', 'Búho', 'Entregas'], autorange='reversed')
     return figura
+
+
+def construir_grafica_de_percentiles_combinada(valores_percentil: dict[str, float]) -> go.Figure:
+    """Curva normal única con varios cortes de percentil marcados como líneas verticales.
+
+    Reemplaza tener una gráfica separada por cada corte (inicio/fin/cobertura de
+    aviso) — todos se marcan sobre la misma distribución ilustrativa, para
+    verlos relativos entre sí de un vistazo.
+
+    Args:
+        valores_percentil: dict `{etiqueta: valor_percentil}`, uno por corte a
+            marcar — por ejemplo `{'Porcentaje inicio': 0.01, 'Porcentaje fin': 0.99}`.
+            Cada valor debe estar estrictamente entre 0 y 1.
+
+    Returns:
+        Figura de Plotly con la curva normal estándar y una línea vertical
+        punteada por cada corte, etiquetada con su nombre y porcentaje.
+    """
+    paso = (_LIMITE_SUPERIOR_EJE_X - _LIMITE_INFERIOR_EJE_X) / (_NUMERO_DE_PUNTOS - 1)
+    valores_x = [_LIMITE_INFERIOR_EJE_X + indice_de_punto * paso for indice_de_punto in range(_NUMERO_DE_PUNTOS)]
+    valores_y = [_DISTRIBUCION_NORMAL_ESTANDAR.pdf(valor_x) for valor_x in valores_x]
+
+    figura = go.Figure()
+    figura.add_trace(go.Scatter(x=valores_x, y=valores_y, mode='lines', name='Distribución ilustrativa'))
+
+    for etiqueta, valor_percentil in valores_percentil.items():
+        corte_z = _DISTRIBUCION_NORMAL_ESTANDAR.inv_cdf(valor_percentil)
+        figura.add_vline(x=corte_z, line_dash='dash', annotation_text=f'{etiqueta} ({valor_percentil:.0%})')
+
+    figura.update_layout(title='Cortes de percentil', showlegend=True, xaxis_title='Valor ilustrativo', yaxis_title='Densidad')
+    return figura

@@ -1,4 +1,4 @@
-"""Tests de pages/metodologia.py."""
+"""Tests de views/metodologia.py."""
 
 from streamlit.testing.v1 import AppTest
 
@@ -22,44 +22,57 @@ def _preparar(monkeypatch):
     monkeypatch.setattr(api_client, 'list_historial_configuracion', lambda: [_CONFIGURACION_VIGENTE])
 
 
-def test_metodologia_muestra_tres_graficas_de_percentil(monkeypatch):
-    # AppTest (streamlit 1.58) no expone un accesor para st.plotly_chart —
-    # renderiza vía JS y no queda en el árbol de elementos introspeccionable
-    # en modo bare. Se verifica el efecto real: la función que arma cada
-    # gráfica se invocó 3 veces y la página corrió sin excepciones.
+def test_metodologia_muestra_una_sola_grafica_combinada(monkeypatch):
     _preparar(monkeypatch)
     llamadas_capturadas = []
-    construir_grafica_original = charts.construir_grafica_de_percentil
+    construir_grafica_original = charts.construir_grafica_de_percentiles_combinada
 
-    def _construir_grafica_y_contar(valor_percentil, titulo):
-        llamadas_capturadas.append(titulo)
-        return construir_grafica_original(valor_percentil, titulo)
+    def _construir_grafica_y_contar(valores_percentil):
+        llamadas_capturadas.append(valores_percentil)
+        return construir_grafica_original(valores_percentil)
 
-    monkeypatch.setattr(charts, 'construir_grafica_de_percentil', _construir_grafica_y_contar)
+    monkeypatch.setattr(charts, 'construir_grafica_de_percentiles_combinada', _construir_grafica_y_contar)
 
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
 
     assert len(app_test.exception) == 0
-    assert len(llamadas_capturadas) == 3
+    assert len(llamadas_capturadas) == 1
+    assert set(llamadas_capturadas[0].keys()) == {'Porcentaje inicio', 'Porcentaje fin', 'Cobertura de aviso'}
 
 
-def test_metodologia_explica_cada_parametro(monkeypatch):
-    # 1 expander de historial (ya existente) + 1 de justificación por cada uno
-    # de los 6 parámetros.
+def test_metodologia_no_tiene_expanders_de_justificacion(monkeypatch):
+    # Antes había 1 expander de justificación por cada uno de los 6 parámetros
+    # (más el de historial). Ahora las justificaciones están siempre visibles:
+    # solo debe quedar el expander de historial.
     _preparar(monkeypatch)
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
 
     assert len(app_test.exception) == 0
-    assert len(app_test.expander) == 7
-    assert sum(1 for expander in app_test.expander if expander.label == 'Ver justificación') == 6
+    assert len(app_test.expander) == 1
+    assert app_test.expander[0].label == 'Historial de combinaciones ya usadas'
 
 
-def test_metodologia_boton_deshabilitado_sin_checkbox(monkeypatch):
+def test_metodologia_explica_cada_parametro_con_actividad_afectada(monkeypatch):
     _preparar(monkeypatch)
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
+
+    assert len(app_test.exception) == 0
+    texto_completo = '\n'.join(elemento.value for elemento in app_test.markdown)
+    assert 'Entregas' in texto_completo
+    assert 'Pick & Pack' in texto_completo
+    assert 'No afecta ningún cálculo del ETL' in texto_completo
+
+
+def test_metodologia_fila_final_tiene_nombre_checkbox_y_boton_juntos(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/metodologia.py')
+    app_test.run()
+
+    assert len(app_test.text_input) == 1
+    assert len(app_test.checkbox) == 1
     boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
     assert boton_guardar.disabled is True
 
