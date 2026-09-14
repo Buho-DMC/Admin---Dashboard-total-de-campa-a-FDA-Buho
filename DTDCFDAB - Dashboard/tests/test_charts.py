@@ -34,7 +34,7 @@ def test_construir_grafica_por_actividad_con_todas_las_etapas():
         'inicio_pick_pack': '2023-01-11T00:00:00', 'fin_pick_pack': '2023-01-12T00:00:00',
         'inicio_entregas': '2023-01-13T00:00:00', 'fin_entregas': '2023-01-14T00:00:00',
     }
-    figura = charts.construir_grafica_por_actividad(snapshot)
+    figura = charts.construir_grafica_por_actividad(snapshot, [])
     assert figura is not None
     assert len(figura.data) > 0
 
@@ -44,14 +44,55 @@ def test_construir_grafica_por_actividad_omite_incompletas():
         'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': '2023-01-02T00:00:00',
         'inicio_carga_preproyectos': '2023-01-03T00:00:00', 'fin_carga_preproyectos': None,
     }
-    figura = charts.construir_grafica_por_actividad(snapshot)
+    figura = charts.construir_grafica_por_actividad(snapshot, [])
     assert figura is not None
 
 
 def test_construir_grafica_por_actividad_vacio_retorna_none():
-    assert charts.construir_grafica_por_actividad({}) is None
+    assert charts.construir_grafica_por_actividad({}, []) is None
     snapshot_incompleto = {'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': None}
-    assert charts.construir_grafica_por_actividad(snapshot_incompleto) is None
+    assert charts.construir_grafica_por_actividad(snapshot_incompleto, []) is None
+
+
+def test_construir_grafica_por_actividad_incluye_marcador_por_hito_con_fecha():
+    snapshot = {'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': '2023-01-02T00:00:00'}
+    eventos = [
+        {'id_evento': 6, 'codigo': 'liberacion_pop', 'nombre': 'Liberación POP', 'fecha': '2023-01-05T00:00:00', 'actualizado_en': None},
+    ]
+    figura = charts.construir_grafica_por_actividad(snapshot, eventos)
+    nombres_de_trazo = [traza.name for traza in figura.data]
+    assert 'Liberación POP' in nombres_de_trazo
+
+
+def test_construir_grafica_por_actividad_ignora_hitos_sin_fecha():
+    snapshot = {'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_carga_artes': '2023-01-02T00:00:00'}
+    eventos = [
+        {'id_evento': 6, 'codigo': 'liberacion_pop', 'nombre': 'Liberación POP', 'fecha': None, 'actualizado_en': None},
+    ]
+    figura = charts.construir_grafica_por_actividad(snapshot, eventos)
+    nombres_de_trazo = [traza.name for traza in figura.data]
+    assert 'Liberación POP' not in nombres_de_trazo
+
+
+def test_construir_grafica_por_actividad_solo_con_hitos_no_retorna_none():
+    eventos = [
+        {'id_evento': 6, 'codigo': 'liberacion_pop', 'nombre': 'Liberación POP', 'fecha': '2023-01-05T00:00:00', 'actualizado_en': None},
+    ]
+    figura = charts.construir_grafica_por_actividad({}, eventos)
+    assert figura is not None
+    assert len(figura.data) == 1
+
+
+def test_construir_grafica_por_actividad_usa_el_simbolo_del_hito():
+    eventos = [
+        {'id_evento': 6, 'codigo': 'liberacion_pop', 'nombre': 'Liberación POP', 'fecha': '2023-01-05T00:00:00', 'actualizado_en': None},
+    ]
+    figura = charts.construir_grafica_por_actividad({}, eventos)
+    assert figura.data[0].marker.symbol == 'star'
+
+
+def test_construir_grafica_por_actividad_sin_etapas_ni_hitos_retorna_none():
+    assert charts.construir_grafica_por_actividad({}, []) is None
 
 
 def test_construir_grafica_por_responsable_con_los_3_bloques_completos():
