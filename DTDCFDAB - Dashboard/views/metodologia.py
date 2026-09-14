@@ -47,7 +47,9 @@ CORTES_DE_PERCENTIL = [
         'etiqueta': 'Porcentaje fin',
         'leyenda': (
             'Define cuándo Pick & Pack se considera terminado. **Ya no aplica a Entregas** — '
-            'Entregas usa "Hueco de entregas" en su lugar.'
+            'Entregas usa "Hueco de entregas" en su lugar. También toca **Impresión de forma '
+            'indirecta**: su fecha de fin de Pick & Pack se usa para descartar reenvíos de '
+            'Impresión posteriores al corte (`regla_odps_validas`).'
         ),
         'justificacion': (
             'El costo de seguir esperando es plano hasta el 98-99% del universo y se dispara '
@@ -221,13 +223,20 @@ def _mostrar_parametros_y_guardar(configuracion_vigente: dict) -> None:
     hueco_entregas_dias = valores_otros['hueco_entregas_dias']
     desfase_rescate_dias = valores_otros['desfase_rescate_dias']
 
-    columna_nombre, columna_checkbox, columna_boton = st.columns(3)
-    with columna_nombre:
+    valores_configuracion = {**valores_percentil, **valores_otros}
+    hay_cambios = any(
+        valores_configuracion[clave] != float(configuracion_vigente[clave]) for clave in valores_configuracion
+    )
+
+    _, columna_centro, _ = st.columns([1, 2, 1])
+    with columna_centro:
         nombre_nueva_configuracion = st.text_input('Nombre de esta combinación de parámetros')
-    with columna_checkbox:
         entiendo_el_recalculo = st.checkbox('Entiendo que esto recalculará todas las campañas')
-    with columna_boton:
-        guardar = st.button('Guardar y recalcular', disabled=not entiendo_el_recalculo)
+        hay_nombre = bool(nombre_nueva_configuracion.strip())
+        guardar = st.button(
+            'Guardar y recalcular',
+            disabled=not (entiendo_el_recalculo and hay_cambios and hay_nombre),
+        )
 
     if guardar:
         try:

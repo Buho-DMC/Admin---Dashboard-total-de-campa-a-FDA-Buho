@@ -27,9 +27,18 @@ def test_calcular_duracion_vs_promedio_etapa_sin_datos_es_none():
 
 def test_calcular_offset_vs_promedio_usa_inicio_carga_artes_como_base():
     resultado = analisis_de_fechas.calcular_offset_vs_promedio(_SNAPSHOT_A, [_SNAPSHOT_A, _SNAPSHOT_B])
-    # Offset de Entregas en A: 9 días (10 ene - 1 ene). En B: 14 días (15 feb - 1 feb).
+    # Offset de Inicio Entregas en A: 9 días (10 ene - 1 ene). En B: 14 días (15 feb - 1 feb).
     # Promedio: 11.5 -> delta de A = 9 - 11.5 = -2.5
-    assert resultado['Entregas'] == (9.0, -2.5)
+    assert resultado['Inicio Entregas'] == (9.0, -2.5)
+    # El offset del primer hito (Inicio Carga de artes) es siempre 0 respecto a sí mismo.
+    assert resultado['Inicio Carga de artes'] == (0.0, 0.0)
+
+
+def test_calcular_offset_vs_promedio_incluye_offset_de_fin_de_etapa():
+    resultado = analisis_de_fechas.calcular_offset_vs_promedio(_SNAPSHOT_A, [_SNAPSHOT_A, _SNAPSHOT_B])
+    # Offset de Fin Entregas en A: 11 días (12 ene - 1 ene). En B: 18 días (19 feb - 1 feb).
+    # Promedio: 14.5 -> delta de A = 11 - 14.5 = -3.5
+    assert resultado['Fin Entregas'] == (11.0, -3.5)
 
 
 def test_listar_fechas_ordenadas_ordena_cronologicamente():

@@ -87,64 +87,68 @@ def calcular_duracion_vs_promedio(snapshot: dict, snapshots: list[dict]) -> dict
 
 
 def calcular_offset_por_etapa(snapshot: dict) -> dict[str, float | None]:
-    """Días desde `inicio_carga_artes` hasta el inicio de cada etapa.
+    """Días desde `inicio_carga_artes` hasta el inicio y el fin de cada etapa.
 
     Args:
         snapshot: diccionario con los campos de `SnapshotOut`.
 
     Returns:
-        Dict con el offset en días por etapa, o `None` si falta la fecha base
-        o la de inicio de esa etapa.
+        Dict con `'Inicio <etapa>'` y `'Fin <etapa>'` como llave por cada etapa de
+        `charts.ETAPAS`, y su offset en días — o `None` si falta la fecha base o esa
+        fecha en particular.
     """
     base = _parsear_fecha(snapshot.get(_CLAVE_BASE_DE_OFFSET))
     resultado = {}
-    for nombre_etapa, clave_inicio, _ in charts.ETAPAS:
+    for nombre_etapa, clave_inicio, clave_fin in charts.ETAPAS:
         inicio = _parsear_fecha(snapshot.get(clave_inicio))
-        resultado[nombre_etapa] = round((inicio - base).total_seconds() / 86400, 2) if base and inicio else None
+        fin = _parsear_fecha(snapshot.get(clave_fin))
+        resultado[f'Inicio {nombre_etapa}'] = round((inicio - base).total_seconds() / 86400, 2) if base and inicio else None
+        resultado[f'Fin {nombre_etapa}'] = round((fin - base).total_seconds() / 86400, 2) if base and fin else None
     return resultado
 
 
 def calcular_offset_promedio(snapshots: list[dict]) -> dict[str, float | None]:
-    """Promedio de offset por etapa entre varios snapshots.
+    """Promedio de offset por etiqueta (inicio/fin de etapa) entre varios snapshots.
 
     Args:
         snapshots: lista de diccionarios `SnapshotOut`, una por campaña.
 
     Returns:
-        Dict con el offset promedio en días por etapa, o `None` si ninguna
-        campaña tiene ese dato.
+        Dict con el offset promedio en días por `'Inicio <etapa>'`/`'Fin <etapa>'`,
+        o `None` si ninguna campaña tiene ese dato.
     """
-    offsets_por_etapa = {nombre: [] for nombre, _, _ in charts.ETAPAS}
+    etiquetas = [f'{prefijo} {nombre}' for nombre, _, _ in charts.ETAPAS for prefijo in ('Inicio', 'Fin')]
+    offsets_por_etiqueta = {etiqueta: [] for etiqueta in etiquetas}
     for snapshot in snapshots:
-        for nombre_etapa, offset in calcular_offset_por_etapa(snapshot).items():
+        for etiqueta, offset in calcular_offset_por_etapa(snapshot).items():
             if offset is not None:
-                offsets_por_etapa[nombre_etapa].append(offset)
+                offsets_por_etiqueta[etiqueta].append(offset)
     return {
-        nombre: round(sum(valores) / len(valores), 2) if valores else None
-        for nombre, valores in offsets_por_etapa.items()
+        etiqueta: round(sum(valores) / len(valores), 2) if valores else None
+        for etiqueta, valores in offsets_por_etiqueta.items()
     }
 
 
 def calcular_offset_vs_promedio(snapshot: dict, snapshots: list[dict]) -> dict[str, tuple[float, float] | None]:
-    """Offset real de una campaña vs. el promedio histórico, por etapa.
+    """Offset real de una campaña vs. el promedio histórico, por inicio/fin de etapa.
 
     Args:
         snapshot: snapshot de la campaña a analizar.
         snapshots: snapshots de todas las campañas, para calcular el promedio.
 
     Returns:
-        Dict con `(offset_real, delta)` por etapa. `None` si falta el dato
-        real o el promedio de esa etapa.
+        Dict con `(offset_real, delta)` por `'Inicio <etapa>'`/`'Fin <etapa>'`. `None`
+        si falta el dato real o el promedio de esa etiqueta.
     """
     promedios = calcular_offset_promedio(snapshots)
     offsets = calcular_offset_por_etapa(snapshot)
     resultado = {}
-    for nombre_etapa, offset in offsets.items():
-        promedio = promedios[nombre_etapa]
+    for etiqueta, offset in offsets.items():
+        promedio = promedios[etiqueta]
         if offset is not None and promedio is not None:
-            resultado[nombre_etapa] = (offset, round(offset - promedio, 2))
+            resultado[etiqueta] = (offset, round(offset - promedio, 2))
         else:
-            resultado[nombre_etapa] = None
+            resultado[etiqueta] = None
     return resultado
 
 

@@ -86,11 +86,33 @@ def test_metodologia_guarda_al_confirmar_checkbox_y_boton(monkeypatch):
     )
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
+    app_test.slider[0].set_value(0.05).run()
+    app_test.text_input[0].input('Prueba de nombre').run()
     app_test.checkbox[0].check().run()
     boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
     boton_guardar.click().run()
     assert len(app_test.success) == 1
     assert app_test.session_state['id_lote_seleccionado'] == 'lote-1'
+
+
+def test_metodologia_boton_deshabilitado_sin_cambios_aunque_haya_nombre(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/metodologia.py')
+    app_test.run()
+    app_test.text_input[0].input('Prueba de nombre').run()
+    app_test.checkbox[0].check().run()
+    boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
+    assert boton_guardar.disabled is True
+
+
+def test_metodologia_boton_deshabilitado_sin_nombre_aunque_haya_cambios(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/metodologia.py')
+    app_test.run()
+    app_test.slider[0].set_value(0.05).run()
+    app_test.checkbox[0].check().run()
+    boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
+    assert boton_guardar.disabled is True
 
 
 def test_metodologia_muestra_error_si_falla_la_carga(monkeypatch):
