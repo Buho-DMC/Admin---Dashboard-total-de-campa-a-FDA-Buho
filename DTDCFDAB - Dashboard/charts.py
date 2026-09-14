@@ -138,9 +138,9 @@ def construir_grafica_por_actividad(snapshot: dict, eventos_de_campana: list[dic
 
     orden_del_eje = [evento['nombre'] for evento in hitos_con_fecha] + nombres_etapas
     figura.update_yaxes(categoryorder='array', categoryarray=orden_del_eje, autorange='reversed')
-    figura.update_layout(plot_bgcolor='white', paper_bgcolor='white')
-    figura.update_xaxes(showgrid=True, gridcolor='#e5e7eb', nticks=15)
-    figura.update_yaxes(showgrid=True, gridcolor='#e5e7eb')
+    figura.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    figura.update_xaxes(showgrid=True, gridcolor='white', nticks=15)
+    figura.update_yaxes(showgrid=True, gridcolor='white')
     return figura
 
 
@@ -215,9 +215,9 @@ def construir_grafica_por_responsable(snapshot: dict) -> go.Figure | None:
         color_discrete_map=_COLORES_POR_RESPONSABLE,
     )
     figura.update_yaxes(categoryorder='array', categoryarray=['FDA', 'Búho', 'Entregas'], autorange='reversed')
-    figura.update_layout(plot_bgcolor='white', paper_bgcolor='white')
-    figura.update_xaxes(showgrid=True, gridcolor='#e5e7eb', nticks=15)
-    figura.update_yaxes(showgrid=True, gridcolor='#e5e7eb')
+    figura.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)')
+    figura.update_xaxes(showgrid=True, gridcolor='white', nticks=15)
+    figura.update_yaxes(showgrid=True, gridcolor='white')
     return figura
 
 

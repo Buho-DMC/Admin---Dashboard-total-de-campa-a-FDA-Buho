@@ -95,13 +95,14 @@ def test_construir_grafica_por_actividad_sin_etapas_ni_hitos_retorna_none():
     assert charts.construir_grafica_por_actividad({}, []) is None
 
 
-def test_construir_grafica_por_actividad_fondo_blanco_y_sin_leyenda_en_hitos():
+def test_construir_grafica_por_actividad_fondo_transparente_y_sin_leyenda_en_hitos():
     eventos = [
         {'id_evento': 6, 'codigo': 'liberacion_pop', 'nombre': 'Liberación POP', 'fecha': '2023-01-05T00:00:00', 'actualizado_en': None},
     ]
     figura = charts.construir_grafica_por_actividad({}, eventos)
-    assert figura.layout.plot_bgcolor == 'white'
-    assert figura.layout.paper_bgcolor == 'white'
+    assert figura.layout.plot_bgcolor == 'rgba(0,0,0,0)'
+    assert figura.layout.paper_bgcolor == 'rgba(0,0,0,0)'
+    assert figura.layout.xaxis.gridcolor == 'white'
     assert figura.data[0].showlegend is False
     assert figura.data[0].mode == 'markers+text'
 
@@ -132,11 +133,12 @@ def test_construir_grafica_por_responsable_vacio_retorna_none():
     assert charts.construir_grafica_por_responsable({}) is None
 
 
-def test_construir_grafica_por_responsable_fondo_blanco():
+def test_construir_grafica_por_responsable_fondo_transparente():
     snapshot = {'inicio_carga_artes': '2023-01-01T00:00:00', 'fin_aprobaciones': '2023-01-05T00:00:00'}
     figura = charts.construir_grafica_por_responsable(snapshot)
-    assert figura.layout.plot_bgcolor == 'white'
-    assert figura.layout.paper_bgcolor == 'white'
+    assert figura.layout.plot_bgcolor == 'rgba(0,0,0,0)'
+    assert figura.layout.paper_bgcolor == 'rgba(0,0,0,0)'
+    assert figura.layout.xaxis.gridcolor == 'white'
 
 
 def test_construir_grafica_de_percentiles_combinada_dibuja_una_linea_por_corte():
