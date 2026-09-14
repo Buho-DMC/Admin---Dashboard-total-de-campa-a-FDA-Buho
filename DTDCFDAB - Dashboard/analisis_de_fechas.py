@@ -168,3 +168,39 @@ def listar_fechas_ordenadas(snapshot: dict) -> list[tuple[str, datetime]]:
             eventos.append((f'Fin {nombre_etapa}', fin))
     eventos.sort(key=lambda evento: evento[1])
     return eventos
+
+
+def calcular_dia_del_mes_vs_promedio(snapshot: dict, snapshots: list[dict]) -> dict[str, tuple[float, float] | None]:
+    """Día del mes de cada fecha de una campaña vs. el promedio histórico, en orden cronológico.
+
+    Args:
+        snapshot: snapshot de la campaña a analizar.
+        snapshots: snapshots de todas las campañas (incluida `snapshot`), para calcular el
+            promedio de cada fecha.
+
+    Returns:
+        Dict con `(dia_real, delta)` por cada fecha presente en `snapshot` (`'Inicio <etapa>'` /
+        `'Fin <etapa>'`), ordenado cronológicamente igual que `listar_fechas_ordenadas`. El día del
+        mes se promedia de forma aritmética simple, sin ajuste de ciclo entre fin e inicio de mes.
+        `None` si `snapshots` no trae ninguna campaña con esa fecha (caso defensivo — no ocurre en
+        el flujo normal, donde `snapshots` siempre incluye a la campaña seleccionada).
+    """
+    entradas = []
+    for nombre_etapa, clave_inicio, clave_fin in charts.ETAPAS:
+        for etiqueta, clave in ((f'Inicio {nombre_etapa}', clave_inicio), (f'Fin {nombre_etapa}', clave_fin)):
+            fecha_real = _parsear_fecha(snapshot.get(clave))
+            if fecha_real is None:
+                continue
+
+            fechas_de_todas_las_campanas = [_parsear_fecha(otro.get(clave)) for otro in snapshots]
+            dias_del_mes = [fecha.day for fecha in fechas_de_todas_las_campanas if fecha is not None]
+
+            if dias_del_mes:
+                promedio = round(sum(dias_del_mes) / len(dias_del_mes), 1)
+                valores = (float(fecha_real.day), round(fecha_real.day - promedio, 1))
+            else:
+                valores = None
+            entradas.append((etiqueta, fecha_real, valores))
+
+    entradas.sort(key=lambda entrada: entrada[1])
+    return {etiqueta: valores for etiqueta, _, valores in entradas}

@@ -67,14 +67,28 @@ ETAPAS = [
 ]
 
 
-def construir_grafica_por_actividad(snapshot: dict) -> go.Figure | None:
-    """Construye una gráfica de línea de tiempo con las 7 etapas de la campaña.
+_SIMBOLOS_POR_CODIGO_DE_HITO = {
+    'entrega_promociones_ac': 'diamond',
+    'entrega_concentrado_folleto': 'square',
+    'entrega_diagramacion_mkt': 'circle',
+    'cierre_comercializacion_espacios': 'x',
+    'entrega_diagramacion_comercializacion': 'triangle-up',
+    'liberacion_pop': 'star',
+    'liberacion_folleto': 'triangle-down',
+}
+
+
+def construir_grafica_por_actividad(snapshot: dict, eventos_de_campana: list[dict]) -> go.Figure | None:
+    """Construye una línea de tiempo con las 7 etapas de la campaña y marcadores de hitos FDA.
 
     Args:
         snapshot: Diccionario con la información del snapshot de la campaña.
+        eventos_de_campana: Hitos FDA de la campaña (`api_client.list_eventos_de_campana`), cada
+            uno con `codigo`, `nombre` y `fecha` (`None` si aún no se ha capturado).
 
     Returns:
-        Figura de Plotly de tipo línea de tiempo (Gantt) o None si no hay etapas completas.
+        Figura de Plotly con las etapas como barras y los hitos FDA como marcadores, o None si no
+        hay ni etapas completas ni hitos con fecha.
     """
     nombres_etapas = []
     inicios = []
@@ -95,16 +109,32 @@ def construir_grafica_por_actividad(snapshot: dict) -> go.Figure | None:
             fines.append(dt_fin)
             nombres_etapas.append(nombre_etapa)
 
-    if not nombres_etapas:
-        return None
-    datos = {
-        'Etapa': nombres_etapas,
-        'Inicio': inicios,
-        'Fin': fines,
-    }
+    hitos_con_fecha = [evento for evento in eventos_de_campana if evento.get('fecha')]
 
-    figura = px.timeline(datos, x_start='Inicio', x_end='Fin', y='Etapa')
-    figura.update_yaxes(autorange='reversed')  # Para que la primera etapa aparezca arriba
+    if not nombres_etapas and not hitos_con_fecha:
+        return None
+
+    if nombres_etapas:
+        datos = {'Etapa': nombres_etapas, 'Inicio': inicios, 'Fin': fines}
+        figura = px.timeline(datos, x_start='Inicio', x_end='Fin', y='Etapa')
+    else:
+        figura = go.Figure()
+
+    for evento in hitos_con_fecha:
+        try:
+            fecha_del_hito = datetime.fromisoformat(evento['fecha'])
+        except (ValueError, TypeError):
+            continue
+        figura.add_trace(go.Scatter(
+            x=[fecha_del_hito],
+            y=[evento['nombre']],
+            mode='markers',
+            marker=dict(size=10, symbol=_SIMBOLOS_POR_CODIGO_DE_HITO.get(evento['codigo'], 'circle')),
+            name=evento['nombre'],
+        ))
+
+    orden_del_eje = [evento['nombre'] for evento in hitos_con_fecha] + nombres_etapas
+    figura.update_yaxes(categoryorder='array', categoryarray=orden_del_eje, autorange='reversed')
     return figura
 
 

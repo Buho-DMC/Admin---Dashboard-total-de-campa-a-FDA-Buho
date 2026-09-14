@@ -41,3 +41,26 @@ def test_listar_fechas_ordenadas_ordena_cronologicamente():
 def test_listar_fechas_ordenadas_ignora_fechas_ausentes():
     resultado = analisis_de_fechas.listar_fechas_ordenadas({'inicio_carga_artes': '2023-01-01T00:00:00'})
     assert resultado == [('Inicio Carga de artes', datetime(2023, 1, 1))]
+
+
+def test_calcular_dia_del_mes_vs_promedio_calcula_delta_correcto():
+    resultado = analisis_de_fechas.calcular_dia_del_mes_vs_promedio(_SNAPSHOT_A, [_SNAPSHOT_A, _SNAPSHOT_B])
+    # Fin Carga de artes: A cae día 3, B día 6 -> promedio 4.5 -> delta de A = 3 - 4.5 = -1.5
+    assert resultado['Fin Carga de artes'] == (3.0, -1.5)
+    # Fin Entregas: A cae día 12, B día 19 -> promedio 15.5 -> delta de A = 12 - 15.5 = -3.5
+    assert resultado['Fin Entregas'] == (12.0, -3.5)
+
+
+def test_calcular_dia_del_mes_vs_promedio_respeta_el_orden_cronologico():
+    resultado = analisis_de_fechas.calcular_dia_del_mes_vs_promedio(_SNAPSHOT_A, [_SNAPSHOT_A, _SNAPSHOT_B])
+    assert list(resultado.keys()) == ['Inicio Carga de artes', 'Fin Carga de artes', 'Inicio Entregas', 'Fin Entregas']
+
+
+def test_calcular_dia_del_mes_vs_promedio_solo_incluye_fechas_de_la_campana_seleccionada():
+    resultado = analisis_de_fechas.calcular_dia_del_mes_vs_promedio(_SNAPSHOT_A, [_SNAPSHOT_A, _SNAPSHOT_B])
+    assert 'Inicio Aprobaciones' not in resultado
+
+
+def test_calcular_dia_del_mes_vs_promedio_sin_campanas_para_promediar_es_none():
+    resultado = analisis_de_fechas.calcular_dia_del_mes_vs_promedio(_SNAPSHOT_A, [])
+    assert resultado['Inicio Carga de artes'] is None
