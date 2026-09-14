@@ -14,14 +14,18 @@ _SNAPSHOT_1 = {
     'inicio_entregas': '2026-08-20T00:00:00', 'fin_entregas': '2026-08-25T00:00:00',
 }
 _EVENTOS_DE_CAMPANA = [{'id_evento': 1, 'codigo': 'arte', 'nombre': 'Arte aprobado', 'fecha': None, 'actualizado_en': None}]
+_CAMPANAS = [
+    {'id_campana': 1, 'id_claw': 501, 'cliente': 'FDA', 'nombre': 'Campaña Otoño 2026', 'inicio_campana': '2026-08-01T00:00:00', 'fecha_alta': '2026-08-01T00:00:00'},
+]
 
 
-def _preparar(monkeypatch, snapshots=None, eventos=None, job=None):
+def _preparar(monkeypatch, snapshots=None, eventos=None, job=None, campanas=None):
     st.cache_data.clear()
     monkeypatch.setattr(api_client, 'list_snapshots_vigentes', lambda: snapshots if snapshots is not None else [_SNAPSHOT_1])
     monkeypatch.setattr(api_client, 'list_eventos_de_campana', lambda id_campana: eventos if eventos is not None else _EVENTOS_DE_CAMPANA)
     monkeypatch.setattr(api_client, 'get_ultimo_job_de_campana', lambda id_campana: job or {'estado': 'exitoso'})
     monkeypatch.setattr(api_client, 'borrar_campana', lambda id_campana: None)
+    monkeypatch.setattr(api_client, 'list_campanas', lambda: campanas if campanas is not None else _CAMPANAS)
 
 
 def test_campanas_muestra_error_si_la_api_falla(monkeypatch):
@@ -146,3 +150,59 @@ def test_campanas_actualizar_hitos_sin_cambios_no_llama_a_la_api(monkeypatch):
     boton_actualizar.click().run()
     assert llamadas_guardadas == []
     assert len(app_test.info) >= 1
+
+
+def test_campanas_selector_muestra_el_nombre_real_de_la_campana(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    selector_de_campana = app_test.selectbox[0]
+    assert selector_de_campana.options == ['Campaña Otoño 2026']
+
+
+def test_campanas_selector_usa_fallback_si_list_campanas_no_trae_el_id(monkeypatch):
+    _preparar(monkeypatch, campanas=[])
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    selector_de_campana = app_test.selectbox[0]
+    assert selector_de_campana.options == ['Campaña 1']
+
+
+def test_campanas_grafica_incluye_hito_con_fecha_sin_lanzar_excepcion(monkeypatch):
+    eventos = [
+        {'id_evento': 6, 'codigo': 'liberacion_pop', 'nombre': 'Liberación POP', 'fecha': '2026-08-10T00:00:00', 'actualizado_en': None},
+    ]
+    _preparar(monkeypatch, eventos=eventos)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    assert len(app_test.exception) == 0
+    assert len(app_test.get('plotly_chart')) == 1
+
+
+def test_campanas_tipo_de_analisis_es_dropdown(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    selector_de_tipo = next(selectbox for selectbox in app_test.selectbox if 'Offset' in selectbox.options)
+    assert selector_de_tipo.options == ['Duración', 'Offset', 'Fechas']
+    assert not any('Offset' in radio.options for radio in app_test.radio)
+
+
+def test_campanas_fechas_muestra_tarjetas_con_delta(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    selector_de_tipo = next(selectbox for selectbox in app_test.selectbox if 'Offset' in selectbox.options)
+    selector_de_tipo.set_value('Fechas').run()
+    assert len(app_test.exception) == 0
+    assert len(app_test.metric) >= 1
+
+
+def test_campanas_fechas_ya_no_usa_texto_plano(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    selector_de_tipo = next(selectbox for selectbox in app_test.selectbox if 'Offset' in selectbox.options)
+    selector_de_tipo.set_value('Fechas').run()
+    textos = [elemento.value for elemento in app_test.get('markdown')]
+    assert not any('Inicio Carga de artes:' in texto for texto in textos)

@@ -12,6 +12,7 @@ st.title('Campañas')
 
 try:
     snapshots_vigentes = api_client.list_snapshots_vigentes()
+    nombres_por_id_campana = {campana['id_campana']: campana['nombre'] for campana in api_client.list_campanas()}
 except Exception as error:
     st.error('No se pudieron obtener las campañas.')
     with st.expander('Detalles técnicos'):
@@ -43,7 +44,7 @@ def _obtener_ultimo_job_cacheado(id_campana: int) -> dict:
 
 
 @st.fragment
-def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: dict[int, dict], snapshots_vigentes: list[dict]) -> None:
+def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: dict[int, dict], snapshots_vigentes: list[dict], nombres_por_id_campana: dict[int, str]) -> None:
     """Selector, gráfica, análisis de fechas, hitos y acciones de la campaña elegida.
 
     Aislado en un fragment: cambiar de vista de gráfica, de tipo de análisis, o
@@ -55,33 +56,17 @@ def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: 
         snapshots_por_id: snapshot de cada campaña, indexado por id.
         snapshots_vigentes: lista completa de snapshots, para los promedios
             históricos del análisis de fechas.
+        nombres_por_id_campana: nombre real de cada campaña (`api_client.list_campanas`), para
+            mostrarlo en el selector en vez del id.
 
     Returns:
         None.
     """
-    id_campana = st.selectbox('Campaña', ids_disponibles, format_func=lambda id_campana: f'Campaña {id_campana}')
+    id_campana = st.selectbox(
+        'Campaña', ids_disponibles,
+        format_func=lambda id_campana: nombres_por_id_campana.get(id_campana, f'Campaña {id_campana}'),
+    )
     snapshot = snapshots_por_id[id_campana]
-
-    vista_grafica = st.radio('Gráfica', ['Por actividad', 'Por responsable'], horizontal=True)
-    if vista_grafica == 'Por responsable':
-        figura = charts.construir_grafica_por_responsable(snapshot)
-    else:
-        figura = charts.construir_grafica_por_actividad(snapshot)
-
-    if figura is not None:
-        st.plotly_chart(figura, use_container_width=True)
-    else:
-        st.info('Todavía no hay etapas con fecha de inicio y fin.')
-
-    st.subheader('Análisis de fechas')
-    tipo_de_analisis = st.radio('Tipo de análisis', ['Duración', 'Offset', 'Fechas'], horizontal=True)
-    if tipo_de_analisis == 'Duración':
-        _mostrar_tarjetas_con_delta(analisis_de_fechas.calcular_duracion_vs_promedio(snapshot, snapshots_vigentes))
-    elif tipo_de_analisis == 'Offset':
-        _mostrar_tarjetas_con_delta(analisis_de_fechas.calcular_offset_vs_promedio(snapshot, snapshots_vigentes))
-    else:
-        for etiqueta, fecha in analisis_de_fechas.listar_fechas_ordenadas(snapshot):
-            st.write(f"{etiqueta}: {fecha.strftime('%Y-%m-%d')}")
 
     try:
         eventos_de_campana = _obtener_eventos_de_campana_cacheado(id_campana)
@@ -91,6 +76,35 @@ def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: 
         with st.expander('Detalles técnicos'):
             st.exception(error)
         st.stop()
+
+    vista_grafica = st.radio('Gráfica', ['Por actividad', 'Por responsable'], horizontal=True)
+    if vista_grafica == 'Por responsable':
+        figura = charts.construir_grafica_por_responsable(snapshot)
+    else:
+        figura = charts.construir_grafica_por_actividad(snapshot, eventos_de_campana)
+
+    if figura is not None:
+        st.plotly_chart(figura, use_container_width=True)
+    else:
+        st.info('Todavía no hay etapas con fecha de inicio y fin.')
+
+    columna_leyenda, columna_dropdown = st.columns([1, 2])
+    with columna_leyenda:
+        st.subheader('Análisis de fechas')
+    with columna_dropdown:
+        tipo_de_analisis = st.selectbox(
+            'Tipo de análisis', ['Duración', 'Offset', 'Fechas'], label_visibility='collapsed',
+        )
+    if tipo_de_analisis == 'Duración':
+        _mostrar_tarjetas_con_delta(analisis_de_fechas.calcular_duracion_vs_promedio(snapshot, snapshots_vigentes))
+    elif tipo_de_analisis == 'Offset':
+        _mostrar_tarjetas_con_delta(analisis_de_fechas.calcular_offset_vs_promedio(snapshot, snapshots_vigentes))
+    else:
+        _mostrar_tarjetas_con_delta(
+            analisis_de_fechas.calcular_dia_del_mes_vs_promedio(snapshot, snapshots_vigentes),
+            formatear_valor=lambda valor: f'Día {valor:.0f}',
+            formatear_delta=lambda delta: f'{delta:+.1f} vs. promedio',
+        )
 
     with st.expander('Fechas de hitos'):
         valores_originales = {}
@@ -146,12 +160,19 @@ def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: 
                 st.success('Campaña borrada.')
 
 
-def _mostrar_tarjetas_con_delta(resultado: dict[str, tuple[float, float] | None]) -> None:
-    """Pinta una tarjeta `st.metric` por etapa, con el delta vs. el promedio histórico.
+def _mostrar_tarjetas_con_delta(
+    resultado: dict[str, tuple[float, float] | None],
+    formatear_valor=lambda valor: f'{valor:.2f} días',
+    formatear_delta=lambda delta: f'{delta:+.2f} días',
+) -> None:
+    """Pinta una tarjeta `st.metric` por etapa o fecha, con el delta vs. el promedio histórico.
 
     Args:
-        resultado: dict de `analisis_de_fechas.calcular_duracion_vs_promedio` o
-            `calcular_offset_vs_promedio` — `(valor_real, delta)` por etapa.
+        resultado: dict de `analisis_de_fechas.calcular_duracion_vs_promedio`,
+            `calcular_offset_vs_promedio` o `calcular_dia_del_mes_vs_promedio` — `(valor_real,
+            delta)` por etapa o fecha.
+        formatear_valor: formatea el valor real de la tarjeta. Por default, días con 2 decimales.
+        formatear_delta: formatea el delta vs. el promedio histórico. Por default, días con signo.
 
     Returns:
         None.
@@ -163,8 +184,8 @@ def _mostrar_tarjetas_con_delta(resultado: dict[str, tuple[float, float] | None]
             continue
         valor_real, delta = valores
         with columnas[indice % 4]:
-            st.metric(nombre_etapa, f'{valor_real:.2f} días', delta=f'{delta:+.2f} días', delta_color='inverse')
+            st.metric(nombre_etapa, formatear_valor(valor_real), delta=formatear_delta(delta), delta_color='inverse')
         indice += 1
 
 
-_mostrar_campana_seleccionada(ids_disponibles, snapshots_por_id, snapshots_ordenados)
+_mostrar_campana_seleccionada(ids_disponibles, snapshots_por_id, snapshots_ordenados, nombres_por_id_campana)
