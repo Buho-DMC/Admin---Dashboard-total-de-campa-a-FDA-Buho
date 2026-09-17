@@ -23,7 +23,59 @@ if not snapshots_vigentes:
     st.info('Todavía no hay campañas con snapshot calculado bajo la configuración vigente.')
     st.stop()
 
-snapshots_ordenados = sorted(snapshots_vigentes, key=lambda snapshot: snapshot.get('calculado_en') or '', reverse=True)
+snapshots_vigentes_raw = snapshots_vigentes
+
+st.sidebar.header('Percentiles Dinámicos')
+st.sidebar.caption('Mueve los sliders para recalcular en vivo los gráficos y promedios:')
+
+st.sidebar.subheader('Pick & Pack')
+p_inicio_pick = st.sidebar.slider(
+    'Inicio Pick & Pack (%)',
+    min_value=0.1,
+    max_value=10.0,
+    value=st.session_state.get('p_inicio_pick', 1.0),
+    step=0.1,
+    format='%.1f%%',
+    key='p_inicio_pick',
+)
+p_fin_pick = st.sidebar.slider(
+    'Fin Pick & Pack (%)',
+    min_value=90.1,
+    max_value=100.0,
+    value=st.session_state.get('p_fin_pick', 99.0),
+    step=0.1,
+    format='%.1f%%',
+    key='p_fin_pick',
+)
+
+st.sidebar.subheader('Entregas')
+p_inicio_entregas = st.sidebar.slider(
+    'Inicio Entregas (%)',
+    min_value=0.1,
+    max_value=10.0,
+    value=st.session_state.get('p_inicio_entregas', 1.0),
+    step=0.1,
+    format='%.1f%%',
+    key='p_inicio_entregas',
+)
+p_fin_entregas = st.sidebar.slider(
+    'Fin Entregas (%)',
+    min_value=90.1,
+    max_value=100.0,
+    value=st.session_state.get('p_fin_entregas', 95.0),
+    step=0.1,
+    format='%.1f%%',
+    key='p_fin_entregas',
+)
+
+percentiles_inicio = {'pick_pack': p_inicio_pick, 'entregas': p_inicio_entregas}
+percentiles_fin = {'pick_pack': p_fin_pick, 'entregas': p_fin_entregas}
+
+snapshots_ajustados = [
+    analisis_de_fechas.aplicar_percentiles_a_snapshot(snapshot, percentiles_inicio, percentiles_fin)
+    for snapshot in snapshots_vigentes_raw
+]
+snapshots_ordenados = sorted(snapshots_ajustados, key=lambda snapshot: snapshot.get('calculado_en') or '', reverse=True)
 snapshots_por_id = {snapshot['id_campana']: snapshot for snapshot in snapshots_ordenados}
 ids_disponibles = list(snapshots_por_id.keys())
 
@@ -98,7 +150,11 @@ def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: 
     if tipo_de_analisis == 'Duración':
         _mostrar_tarjetas_con_delta(analisis_de_fechas.calcular_duracion_vs_promedio(snapshot, snapshots_vigentes))
     elif tipo_de_analisis == 'Offset':
-        _mostrar_tarjetas_con_delta(analisis_de_fechas.calcular_offset_vs_promedio(snapshot, snapshots_vigentes))
+        _mostrar_tarjetas_con_delta(
+            analisis_de_fechas.calcular_offset_cronologico(snapshot, eventos_de_campana),
+            formatear_valor=lambda valor: 'Día 0 (Base)' if valor == 0 else f'+{valor:.1f} días',
+            formatear_delta=lambda delta: f'{delta:+.2f} días' if delta is not None else '',
+        )
     else:
         _mostrar_tarjetas_con_delta(
             analisis_de_fechas.calcular_dia_del_mes_vs_promedio(snapshot, snapshots_vigentes),
@@ -161,7 +217,7 @@ def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: 
 
 
 def _mostrar_tarjetas_con_delta(
-    resultado: dict[str, tuple[float, float] | None],
+    resultado: dict[str, tuple[float, float | None] | None],
     formatear_valor=lambda valor: f'{valor:.2f} días',
     formatear_delta=lambda delta: f'{delta:+.2f} días',
 ) -> None:
@@ -169,7 +225,7 @@ def _mostrar_tarjetas_con_delta(
 
     Args:
         resultado: dict de `analisis_de_fechas.calcular_duracion_vs_promedio`,
-            `calcular_offset_vs_promedio` o `calcular_dia_del_mes_vs_promedio` — `(valor_real,
+            `calcular_offset_cronologico` o `calcular_dia_del_mes_vs_promedio` — `(valor_real,
             delta)` por etapa o fecha.
         formatear_valor: formatea el valor real de la tarjeta. Por default, días con 2 decimales.
         formatear_delta: formatea el delta vs. el promedio histórico. Por default, días con signo.
@@ -184,8 +240,12 @@ def _mostrar_tarjetas_con_delta(
             continue
         valor_real, delta = valores
         with columnas[indice % 4]:
-            st.metric(nombre_etapa, formatear_valor(valor_real), delta=formatear_delta(delta), delta_color='inverse')
+            delta_texto = formatear_delta(delta) if delta is not None else None
+            if delta_texto:
+                st.metric(nombre_etapa, formatear_valor(valor_real), delta=delta_texto, delta_color='inverse')
+            else:
+                st.metric(nombre_etapa, formatear_valor(valor_real))
         indice += 1
 
 
-_mostrar_campana_seleccionada(ids_disponibles, snapshots_por_id, snapshots_ordenados, nombres_por_id_campana)
+_mostrar_campana_seleccionada(ids_disponibles, snapshots_por_id, snapshots_ajustados, nombres_por_id_campana)

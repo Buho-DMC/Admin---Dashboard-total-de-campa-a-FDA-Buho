@@ -11,7 +11,7 @@ una query.
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DECIMAL, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, text
+from sqlalchemy import DECIMAL, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, JSON, String, Text, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -141,6 +141,7 @@ class CampanaSnapshot(Base):
     respuesta_buho_dias: Mapped[Decimal | None] = mapped_column(DECIMAL(9, 4), nullable=True)
     respuesta_fda_dias: Mapped[Decimal | None] = mapped_column(DECIMAL(9, 4), nullable=True)
     folios_invertidos: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    distribucion_percentiles: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     calculado_en: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=text('CURRENT_TIMESTAMP'))
 
 

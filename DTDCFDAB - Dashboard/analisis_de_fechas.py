@@ -208,3 +208,91 @@ def calcular_dia_del_mes_vs_promedio(snapshot: dict, snapshots: list[dict]) -> d
 
     entradas.sort(key=lambda entrada: entrada[1])
     return {etiqueta: valores for etiqueta, _, valores in entradas}
+
+
+def aplicar_percentiles_a_snapshot(
+    snapshot: dict,
+    percentiles_inicio: dict[str, float],
+    percentiles_fin: dict[str, float],
+) -> dict:
+    """Ajusta en memoria las fechas de inicio y fin del snapshot según percentiles seleccionados.
+
+    Args:
+        snapshot: dict con campos de `SnapshotOut` (incluyendo `distribucion_percentiles`).
+        percentiles_inicio: dict con percentil de inicio (0.1 a 10.0) por etapa (ej: {'pick_pack': 1.0}).
+        percentiles_fin: dict con percentil de fin (90.1 a 100.0) por etapa (ej: {'pick_pack': 99.0}).
+
+    Returns:
+        Copia del snapshot con las fechas de inicio/fin ajustadas según la rejilla en JSON.
+    """
+    nuevo = dict(snapshot)
+    distribucion = snapshot.get('distribucion_percentiles')
+    if not distribucion or not isinstance(distribucion, dict):
+        return nuevo
+
+    mapeo_columnas = {
+        'pick_pack': ('inicio_pick_pack', 'fin_pick_pack'),
+        'entregas': ('inicio_entregas', 'fin_entregas'),
+    }
+
+    for etapa, (columna_inicio, columna_fin) in mapeo_columnas.items():
+        if etapa in distribucion and isinstance(distribucion[etapa], dict):
+            rejilla_etapa = distribucion[etapa]
+            if etapa in percentiles_inicio and 'inicio' in rejilla_etapa:
+                clave_inicio = f'{percentiles_inicio[etapa]:.1f}'
+                if clave_inicio in rejilla_etapa['inicio'] and rejilla_etapa['inicio'][clave_inicio]:
+                    nuevo[columna_inicio] = rejilla_etapa['inicio'][clave_inicio]
+
+            if etapa in percentiles_fin and 'fin' in rejilla_etapa:
+                clave_fin = f'{percentiles_fin[etapa]:.1f}'
+                if clave_fin in rejilla_etapa['fin'] and rejilla_etapa['fin'][clave_fin]:
+                    nuevo[columna_fin] = rejilla_etapa['fin'][clave_fin]
+
+    return nuevo
+
+
+def calcular_offset_cronologico(
+    snapshot: dict, eventos_de_campana: list[dict] | None = None
+) -> dict[str, tuple[float, float | None]]:
+    """Calcula el offset en días desde el Día 0 (hito más temprano), ordenado cronológicamente.
+
+    Args:
+        snapshot: dict con campos de `SnapshotOut`.
+        eventos_de_campana: lista opcional de hitos FDA con llaves 'nombre' y 'fecha'.
+
+    Returns:
+        Dict con `(offset_dias, None)` para cada hito y extremo de etapa presente,
+        ordenado cronológicamente de forma ascendente.
+    """
+    entradas = []
+    fechas_hitos = []
+
+    if eventos_de_campana:
+        for evento in eventos_de_campana:
+            fecha_hito = _parsear_fecha(evento.get('fecha'))
+            if fecha_hito is not None:
+                etiqueta = evento.get('nombre') or 'Hito'
+                entradas.append((etiqueta, fecha_hito))
+                fechas_hitos.append(fecha_hito)
+
+    for nombre_etapa, clave_inicio, clave_fin in charts.ETAPAS:
+        inicio = _parsear_fecha(snapshot.get(clave_inicio))
+        fin = _parsear_fecha(snapshot.get(clave_fin))
+        if inicio is not None:
+            entradas.append((f'Inicio {nombre_etapa}', inicio))
+        if fin is not None:
+            entradas.append((f'Fin {nombre_etapa}', fin))
+
+    if not entradas:
+        return {}
+
+    dia_cero = min(fechas_hitos) if fechas_hitos else min(fecha for _, fecha in entradas)
+    entradas.sort(key=lambda entrada: entrada[1])
+
+    resultado = {}
+    for etiqueta, fecha in entradas:
+        dias = round((fecha - dia_cero).total_seconds() / 86400, 2)
+        resultado[etiqueta] = (dias, None)
+
+    return resultado
+

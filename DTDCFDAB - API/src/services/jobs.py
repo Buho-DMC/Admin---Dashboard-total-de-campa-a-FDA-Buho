@@ -1,5 +1,6 @@
 """Ciclo de vida de los jobs de ETL: crear, consultar, encolar y reintentar."""
 
+import json
 from datetime import datetime, timezone
 
 from google.cloud import tasks_v2
@@ -333,6 +334,8 @@ def _upsert_snapshot(
         'id_campana': id_campana, 'id_configuracion': id_configuracion,
         'calculado_en': calculado_en, **resultado_del_etl,
     }
+    if isinstance(parametros.get('distribucion_percentiles'), (dict, list)):
+        parametros['distribucion_percentiles'] = json.dumps(parametros['distribucion_percentiles'])
 
     if connection.dialect.name == 'sqlite':
         actualizacion = ', '.join(f'{columna} = excluded.{columna}' for columna in columnas_a_actualizar)

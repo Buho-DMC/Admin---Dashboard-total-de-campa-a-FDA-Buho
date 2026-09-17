@@ -206,3 +206,32 @@ def test_campanas_fechas_ya_no_usa_texto_plano(monkeypatch):
     selector_de_tipo.set_value('Fechas').run()
     textos = [elemento.value for elemento in app_test.get('markdown')]
     assert not any('Inicio Carga de artes:' in texto for texto in textos)
+
+
+def test_campanas_tiene_sliders_de_percentiles_en_sidebar(monkeypatch):
+    _preparar(monkeypatch)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    assert len(app_test.sidebar.slider) == 4
+    etiquetas = [slider.label for slider in app_test.sidebar.slider]
+    assert 'Inicio Pick & Pack (%)' in etiquetas
+    assert 'Fin Pick & Pack (%)' in etiquetas
+    assert 'Inicio Entregas (%)' in etiquetas
+    assert 'Fin Entregas (%)' in etiquetas
+
+
+def test_campanas_offset_muestra_tarjetas_cronologicas(monkeypatch):
+    eventos = [
+        {'id_evento': 1, 'codigo': 'arte', 'nombre': 'Arte aprobado', 'fecha': '2026-07-28T00:00:00', 'actualizado_en': None}
+    ]
+    _preparar(monkeypatch, eventos=eventos)
+    app_test = AppTest.from_file('views/campanas.py')
+    app_test.run()
+    selector_de_tipo = next(selectbox for selectbox in app_test.selectbox if 'Offset' in selectbox.options)
+    selector_de_tipo.set_value('Offset').run()
+    assert len(app_test.exception) == 0
+    assert len(app_test.metric) >= 1
+    # Debe haber al menos una métrica para el hito o el Día 0
+    valores_metricas = [metric.value for metric in app_test.metric]
+    assert any('Día 0' in val or '0.0' in val or 'días' in val for val in valores_metricas)
+

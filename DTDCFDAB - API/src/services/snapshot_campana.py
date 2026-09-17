@@ -468,6 +468,7 @@ def _calcular_extremo(datos: pd.DataFrame, configuracion_extremo: dict, inicio: 
             'numero_unidades_total': int(len(eventos_agrupados)),
             'numero_unidades_con_dato': int(len(eventos_agrupados)),
             'fecha_100': eventos_agrupados.max() if len(eventos_agrupados) else pd.NaT,
+            'eventos_ordenados': eventos_agrupados.sort_values(),
             'extras': {
                 'numero_bloques': int(len(resumen_de_bloques)),
                 'bloques_descartados': (
@@ -507,7 +508,42 @@ def _calcular_extremo(datos: pd.DataFrame, configuracion_extremo: dict, inicio: 
         'numero_unidades_total': numero_unidades_total,
         'numero_unidades_con_dato': numero_unidades_con_dato,
         'fecha_100': fecha_100,
+        'eventos_ordenados': eventos_ordenados,
         'extras': extras,
+    }
+
+
+def _calcular_rejilla_percentiles(
+    eventos_inicio: pd.Series, eventos_fin: pd.Series
+) -> dict[str, dict[str, str | None]]:
+    """Calcula 100 cuantiles de inicio (0.1% a 10.0%) y 100 de fin (90.1% a 100.0%) con saltos de 0.1%.
+
+    Args:
+        eventos_inicio: serie cronológica ordenada para la cola de inicio.
+        eventos_fin: serie cronológica ordenada para la cola de fin.
+
+    Returns:
+        Dict con sub-diccionarios 'inicio' y 'fin' mapeando porcentaje (str) a timestamp formateado.
+    """
+    rejilla_inicio = {}
+    if eventos_inicio is not None and len(eventos_inicio) > 0:
+        for paso in range(1, 101):
+            porcentaje_numero = round(paso * 0.1, 1)
+            clave = f'{porcentaje_numero:.1f}'
+            valor = punto_de_avance(eventos_inicio, porcentaje_numero / 100.0)
+            rejilla_inicio[clave] = valor.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(valor) else None
+
+    rejilla_fin = {}
+    if eventos_fin is not None and len(eventos_fin) > 0:
+        for paso in range(1, 101):
+            porcentaje_numero = round(90.0 + paso * 0.1, 1)
+            clave = f'{porcentaje_numero:.1f}'
+            valor = punto_de_avance(eventos_fin, porcentaje_numero / 100.0)
+            rejilla_fin[clave] = valor.strftime('%Y-%m-%d %H:%M:%S') if pd.notna(valor) else None
+
+    return {
+        'inicio': rejilla_inicio,
+        'fin': rejilla_fin,
     }
 
 
@@ -535,7 +571,8 @@ def calcular_etapa(
         (resultado_etapa, metadatos_de_reglas)
         resultado_etapa: {'inicio', 'fin', 'numero_unidades_total',
             'numero_unidades_con_dato', 'porcentaje_alcanzado',
-            'fecha_completado_al_100', **extras de cada extremo}
+            'fecha_completado_al_100', 'distribucion_percentiles',
+            **extras de cada extremo}
         metadatos_de_reglas: {nombre_regla: sus metadatos}
 
     Raises:
@@ -560,6 +597,8 @@ def calcular_etapa(
 
     numero_unidades_total = resultado_fin['numero_unidades_total']
     numero_unidades_con_dato = resultado_fin['numero_unidades_con_dato']
+    eventos_inicio = resultado_inicio.get('eventos_ordenados', pd.Series(dtype='object'))
+    eventos_fin = resultado_fin.get('eventos_ordenados', pd.Series(dtype='object'))
 
     resultado_etapa = {
         'inicio': resultado_inicio['valor'],
@@ -570,6 +609,7 @@ def calcular_etapa(
             numero_unidades_con_dato / numero_unidades_total if numero_unidades_total else float('nan')
         ),
         'fecha_completado_al_100': resultado_fin['fecha_100'],
+        'distribucion_percentiles': _calcular_rejilla_percentiles(eventos_inicio, eventos_fin),
         **resultado_inicio['extras'],
         **resultado_fin['extras'],
     }
@@ -933,6 +973,13 @@ def _ensamblar_snapshot(resultados_etapas: dict, metadatos_etapas: dict, kpis_ci
         snapshot[columna_inicio] = resultados_etapas[nombre_etapa]['inicio']
         snapshot[columna_fin] = resultados_etapas[nombre_etapa]['fin']
 
+    distribucion_percentiles = {
+        nombre_etapa: resultados_etapas[nombre_etapa]['distribucion_percentiles']
+        for nombre_etapa in COLUMNAS_POR_ETAPA.keys()
+        if 'distribucion_percentiles' in resultados_etapas.get(nombre_etapa, {})
+    }
+    snapshot['distribucion_percentiles'] = distribucion_percentiles if distribucion_percentiles else None
+
     entregas = resultados_etapas['entregas']
     metadatos_rescate = metadatos_etapas['entregas']['rescate_entregas']
     snapshot.update({
@@ -950,7 +997,10 @@ def _ensamblar_snapshot(resultados_etapas: dict, metadatos_etapas: dict, kpis_ci
         'respuesta_fda_dias': kpis_ciclo['respuesta_fda_mediana_dias'],
         'folios_invertidos': kpis_ciclo['folios_invertidos'],
     })
-    return {campo: (None if pd.isna(valor) else valor) for campo, valor in snapshot.items()}
+    return {
+        campo: (None if (campo != 'distribucion_percentiles' and pd.isna(valor)) else valor)
+        for campo, valor in snapshot.items()
+    }
 
 
 def calcular_snapshot_campana(id_claw: int, configuracion: dict, claw_client: httpx.Client, retool_engine) -> dict:

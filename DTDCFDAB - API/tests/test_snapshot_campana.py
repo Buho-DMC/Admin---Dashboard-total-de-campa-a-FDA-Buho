@@ -10,6 +10,7 @@ from src.services.snapshot_campana import (
     RUTA_CLAW_PICKS,
     RUTA_CLAW_TRACKING,
     _calcular_extremo,
+    _calcular_rejilla_percentiles,
     _configuracion_del_extremo,
     _construir_configuracion_etapas,
     _ensamblar_snapshot,
@@ -608,3 +609,49 @@ def test_calcular_snapshot_campana_sin_picks_de_claw_lanza_valueerror(monkeypatc
 
     with pytest.raises(ValueError):
         calcular_snapshot_campana(id_claw=229, configuracion=CONFIGURACION_DE_EJEMPLO, claw_client=None, retool_engine=None)
+
+
+def test_calcular_rejilla_percentiles_genera_100_puntos_por_lado():
+    fechas = pd.date_range('2026-01-01', periods=1000, freq='h').to_series()
+    resultado = _calcular_rejilla_percentiles(fechas, fechas)
+
+    assert 'inicio' in resultado
+    assert 'fin' in resultado
+    assert len(resultado['inicio']) == 100
+    assert len(resultado['fin']) == 100
+    assert '0.1' in resultado['inicio']
+    assert '10.0' in resultado['inicio']
+    assert '90.1' in resultado['fin']
+    assert '100.0' in resultado['fin']
+    assert resultado['inicio']['0.1'] is not None
+    assert resultado['fin']['100.0'] is not None
+
+
+def test_calcular_snapshot_campana_incluye_distribucion_percentiles(monkeypatch):
+    fuentes = _fuentes_de_campana_de_ejemplo()
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_digital',
+        lambda retool_engine, id_claw: fuentes['retool_digital'],
+    )
+    monkeypatch.setattr(
+        snapshot_campana_module, 'obtener_datos_retool_precampana',
+        lambda retool_engine, id_claw: fuentes['retool_precampana'],
+    )
+    def claw_falso(claw_client, ruta_base, id_claw):
+        if ruta_base == RUTA_CLAW_PICKS:
+            return fuentes['claw_picks']
+        return fuentes['claw_tracking']
+
+    monkeypatch.setattr(snapshot_campana_module, 'obtener_datos_claw', claw_falso)
+
+    snapshot = calcular_snapshot_campana(
+        id_claw=229, configuracion=CONFIGURACION_DE_EJEMPLO, claw_client=None, retool_engine=None
+    )
+
+    assert 'distribucion_percentiles' in snapshot
+    assert snapshot['distribucion_percentiles'] is not None
+    assert 'entregas' in snapshot['distribucion_percentiles']
+    assert 'pick_pack' in snapshot['distribucion_percentiles']
+    assert len(snapshot['distribucion_percentiles']['entregas']['inicio']) == 100
+    assert len(snapshot['distribucion_percentiles']['entregas']['fin']) == 100
+

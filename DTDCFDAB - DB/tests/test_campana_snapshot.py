@@ -31,3 +31,29 @@ def test_un_snapshot_por_campana_y_configuracion(db_session):
     db_session.add(snapshot_duplicado)
     with pytest.raises(IntegrityError):
         db_session.flush()
+
+
+def test_snapshot_con_distribucion_percentiles(db_session):
+    campana = Campana(id_claw=2002, nombre='Campana percentiles', inicio_campana=datetime(2026, 1, 1))
+    configuracion_vigente = db_session.query(Configuracion).filter_by(es_vigente=True).one()
+    db_session.add(campana)
+    db_session.flush()
+
+    distribucion = {
+        'pick_pack': {
+            'inicio': {'0.1': '2026-01-05T08:00:00', '10.0': '2026-01-06T12:00:00'},
+            'fin': {'90.1': '2026-01-20T10:00:00', '100.0': '2026-01-22T18:00:00'},
+        }
+    }
+    snapshot = CampanaSnapshot(
+        id_campana=campana.id_campana,
+        id_configuracion=configuracion_vigente.id_configuracion,
+        distribucion_percentiles=distribucion,
+    )
+    db_session.add(snapshot)
+    db_session.flush()
+
+    recuperado = db_session.query(CampanaSnapshot).filter_by(id_campana=campana.id_campana).one()
+    assert recuperado.distribucion_percentiles == distribucion
+    assert recuperado.distribucion_percentiles['pick_pack']['inicio']['0.1'] == '2026-01-05T08:00:00'
+

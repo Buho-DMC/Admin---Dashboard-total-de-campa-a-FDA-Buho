@@ -73,3 +73,59 @@ def test_calcular_dia_del_mes_vs_promedio_solo_incluye_fechas_de_la_campana_sele
 def test_calcular_dia_del_mes_vs_promedio_sin_campanas_para_promediar_es_none():
     resultado = analisis_de_fechas.calcular_dia_del_mes_vs_promedio(_SNAPSHOT_A, [])
     assert resultado['Inicio Carga de artes'] is None
+
+
+def test_aplicar_percentiles_a_snapshot_actualiza_fechas_segun_rejilla():
+    snapshot = {
+        'id_campana': 1,
+        'inicio_pick_pack': '2026-01-05T08:00:00',
+        'fin_pick_pack': '2026-01-20T18:00:00',
+        'distribucion_percentiles': {
+            'pick_pack': {
+                'inicio': {'0.5': '2026-01-05T09:00:00', '1.0': '2026-01-05T10:00:00'},
+                'fin': {'95.0': '2026-01-19T17:00:00', '99.0': '2026-01-20T18:00:00'},
+            }
+        },
+    }
+    resultado = analisis_de_fechas.aplicar_percentiles_a_snapshot(
+        snapshot,
+        percentiles_inicio={'pick_pack': 0.5},
+        percentiles_fin={'pick_pack': 95.0},
+    )
+    assert resultado['inicio_pick_pack'] == '2026-01-05T09:00:00'
+    assert resultado['fin_pick_pack'] == '2026-01-19T17:00:00'
+
+
+def test_aplicar_percentiles_a_snapshot_sin_distribucion_retorna_copia_sin_cambios():
+    snapshot = {'id_campana': 1, 'inicio_pick_pack': '2026-01-05T08:00:00'}
+    resultado = analisis_de_fechas.aplicar_percentiles_a_snapshot(
+        snapshot,
+        percentiles_inicio={'pick_pack': 0.5},
+        percentiles_fin={'pick_pack': 95.0},
+    )
+    assert resultado == snapshot
+
+
+def test_calcular_offset_cronologico_toma_hito_minimo_como_dia_cero():
+    snapshot = {
+        'inicio_carga_artes': '2026-01-08T00:00:00',
+        'fin_carga_artes': '2026-01-10T00:00:00',
+    }
+    eventos = [
+        {'nombre': 'Kickoff FDA', 'fecha': '2026-01-05T00:00:00'},
+        {'nombre': 'Lanzamiento', 'fecha': '2026-01-12T00:00:00'},
+    ]
+    resultado = analisis_de_fechas.calcular_offset_cronologico(snapshot, eventos)
+
+    # El orden cronológico debe ser:
+    # 1. Kickoff FDA (Día 0)
+    # 2. Inicio Carga de artes (+3 días)
+    # 3. Fin Carga de artes (+5 días)
+    # 4. Lanzamiento (+7 días)
+    claves = list(resultado.keys())
+    assert claves == ['Kickoff FDA', 'Inicio Carga de artes', 'Fin Carga de artes', 'Lanzamiento']
+    assert resultado['Kickoff FDA'] == (0.0, None)
+    assert resultado['Inicio Carga de artes'] == (3.0, None)
+    assert resultado['Fin Carga de artes'] == (5.0, None)
+    assert resultado['Lanzamiento'] == (7.0, None)
+

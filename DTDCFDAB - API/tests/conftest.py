@@ -71,6 +71,7 @@ ESQUEMA_STATEMENTS = [
         respuesta_buho_dias REAL,
         respuesta_fda_dias REAL,
         folios_invertidos INTEGER,
+        distribucion_percentiles TEXT,
         calculado_en TEXT,
         PRIMARY KEY (id_campana, id_configuracion)
     )

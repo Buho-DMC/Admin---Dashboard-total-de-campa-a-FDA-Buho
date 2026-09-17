@@ -1,4 +1,4 @@
-"""Snapshots de ETL por (campaña, configuración)."""
+import json
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -13,8 +13,21 @@ COLUMNAS_SNAPSHOT = (
     'inicio_entregas, fin_entregas, '
     'porcentaje_alcanzado_entregas, ultima_entrega, numero_envios, envios_con_fecha, envios_sin_fecha, '
     'envios_sin_registro_entrega, numero_cajas_pick_pack, numero_folios, numero_odps, numero_actividades, '
-    'respuesta_buho_dias, respuesta_fda_dias, folios_invertidos, calculado_en'
+    'respuesta_buho_dias, respuesta_fda_dias, folios_invertidos, distribucion_percentiles, calculado_en'
 )
+
+
+def _deserializar_snapshot(datos: dict | None) -> dict | None:
+    """Deserializa columnas JSON si vienen como string desde SQLite o el driver."""
+    if not datos:
+        return datos
+    distribucion = datos.get('distribucion_percentiles')
+    if isinstance(distribucion, str):
+        try:
+            datos['distribucion_percentiles'] = json.loads(distribucion)
+        except Exception:
+            datos['distribucion_percentiles'] = None
+    return datos
 
 
 def get_snapshot(engine: Engine, id_campana: int, id_configuracion: int) -> dict | None:
@@ -36,7 +49,7 @@ def get_snapshot(engine: Engine, id_campana: int, id_configuracion: int) -> dict
             ),
             {'id_campana': id_campana, 'id_configuracion': id_configuracion},
         ).mappings().first()
-        return dict(snapshot_row) if snapshot_row else None
+        return _deserializar_snapshot(dict(snapshot_row)) if snapshot_row else None
 
 
 def list_snapshots_vigentes(engine: Engine) -> list[dict]:
@@ -57,4 +70,5 @@ def list_snapshots_vigentes(engine: Engine) -> list[dict]:
             text(f'SELECT {COLUMNAS_SNAPSHOT} FROM dtdcfdab_campana_snapshot WHERE id_configuracion = :id_configuracion'),
             {'id_configuracion': configuracion_vigente['id_configuracion']},
         )
-        return [dict(row._mapping) for row in result_rows]
+        return [_deserializar_snapshot(dict(row._mapping)) for row in result_rows]
+

@@ -37,4 +37,5 @@ class SnapshotOut(BaseModel):
     respuesta_buho_dias: float | None
     respuesta_fda_dias: float | None
     folios_invertidos: int | None
+    distribucion_percentiles: dict | None = None
     calculado_en: datetime | None

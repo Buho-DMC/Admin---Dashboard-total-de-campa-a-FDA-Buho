@@ -130,21 +130,22 @@ OTROS_PARAMETROS = [
 ]
 
 
-@st.fragment
-def _mostrar_parametros_y_guardar(configuracion_vigente: dict) -> None:
-    """Pinta los 6 parámetros en grillas de 3 columnas, sus gráficas y el botón de guardar.
-
-    Aislado en un fragment: mover un slider re-ejecuta este fragment (para que
-    la gráfica combinada se mueva en vivo), pero no el script completo.
+def _mostrar_metodologia(configuracion_vigente: dict) -> None:
+    """Muestra la documentación explicativa de los parámetros y sus valores base vigentes.
 
     Args:
-        configuracion_vigente: parámetros actualmente vigentes, para
-            precargar el valor inicial de cada control.
+        configuracion_vigente: dict con los parámetros vigentes del backend.
 
     Returns:
         None.
     """
-    st.subheader('Cortes de percentil')
+    st.info(
+        '💡 **Calibración en vivo:** Cada snapshot ahora guarda la distribución completa de '
+        'percentiles en saltos de 0.1%. Para calibrar cortes y ver el recálculo dinámico de '
+        'promedios, utiliza los sliders interactivos en la barra lateral de la pestaña **Campañas**.'
+    )
+
+    st.subheader('Cortes de percentil (Línea base)')
 
     columnas_leyenda = st.columns(3)
     for columna, parametro in zip(columnas_leyenda, CORTES_DE_PERCENTIL):
@@ -159,21 +160,15 @@ def _mostrar_parametros_y_guardar(configuracion_vigente: dict) -> None:
             for actividad in parametro['actividades']:
                 st.markdown(f'- {actividad}')
 
-    valores_percentil = {}
-    columnas_slider = st.columns(3)
-    for columna, parametro in zip(columnas_slider, CORTES_DE_PERCENTIL):
+    columnas_metricas = st.columns(3)
+    for columna, parametro in zip(columnas_metricas, CORTES_DE_PERCENTIL):
         with columna:
-            valores_percentil[parametro['clave']] = st.slider(
-                parametro['etiqueta'],
-                min_value=parametro['min_value'],
-                max_value=parametro['max_value'],
-                value=float(configuracion_vigente[parametro['clave']]),
-                step=parametro['step'],
-            )
+            valor = float(configuracion_vigente[parametro['clave']])
+            st.metric(f"Valor base: {parametro['etiqueta']}", f'{valor * 100:.1f}%')
 
-    porcentaje_inicio = valores_percentil['porcentaje_inicio']
-    porcentaje_fin = valores_percentil['porcentaje_fin']
-    cobertura_aviso = valores_percentil['cobertura_aviso']
+    porcentaje_inicio = float(configuracion_vigente['porcentaje_inicio'])
+    porcentaje_fin = float(configuracion_vigente['porcentaje_fin'])
+    cobertura_aviso = float(configuracion_vigente['cobertura_aviso'])
 
     st.plotly_chart(
         charts.construir_grafica_de_percentiles_combinada(
@@ -186,7 +181,7 @@ def _mostrar_parametros_y_guardar(configuracion_vigente: dict) -> None:
         use_container_width=True,
     )
 
-    st.subheader('Otros parámetros')
+    st.subheader('Otros parámetros del cálculo')
 
     columnas_leyenda_otros = st.columns(3)
     for columna, parametro in zip(columnas_leyenda_otros, OTROS_PARAMETROS):
@@ -201,63 +196,13 @@ def _mostrar_parametros_y_guardar(configuracion_vigente: dict) -> None:
             for actividad in parametro['actividades']:
                 st.markdown(f'- {actividad}')
 
-    valores_otros = {}
-    columnas_valor_otros = st.columns(3)
-    for columna, parametro in zip(columnas_valor_otros, OTROS_PARAMETROS):
+    columnas_metricas_otros = st.columns(3)
+    for columna, parametro in zip(columnas_metricas_otros, OTROS_PARAMETROS):
         with columna:
-            if parametro['tipo_control'] == 'slider':
-                valores_otros[parametro['clave']] = st.slider(
-                    parametro['etiqueta'],
-                    min_value=parametro['min_value'],
-                    max_value=parametro['max_value'],
-                    value=float(configuracion_vigente[parametro['clave']]),
-                )
-            else:
-                valores_otros[parametro['clave']] = st.number_input(
-                    parametro['etiqueta'],
-                    min_value=parametro['min_value'],
-                    value=float(configuracion_vigente[parametro['clave']]),
-                )
-
-    porcentaje_bloque_minimo = valores_otros['porcentaje_bloque_minimo']
-    hueco_entregas_dias = valores_otros['hueco_entregas_dias']
-    desfase_rescate_dias = valores_otros['desfase_rescate_dias']
-
-    valores_configuracion = {**valores_percentil, **valores_otros}
-    hay_cambios = any(
-        valores_configuracion[clave] != float(configuracion_vigente[clave]) for clave in valores_configuracion
-    )
-
-    _, columna_centro, _ = st.columns([1, 2, 1])
-    with columna_centro:
-        nombre_nueva_configuracion = st.text_input('Nombre de esta combinación de parámetros')
-        entiendo_el_recalculo = st.checkbox('Entiendo que esto recalculará todas las campañas')
-        hay_nombre = bool(nombre_nueva_configuracion.strip())
-        guardar = st.button(
-            'Guardar y recalcular',
-            disabled=not (entiendo_el_recalculo and hay_cambios and hay_nombre),
-        )
-
-    if guardar:
-        try:
-            resultado = api_client.crear_configuracion(
-                nombre=nombre_nueva_configuracion,
-                porcentaje_fin=porcentaje_fin,
-                porcentaje_inicio=porcentaje_inicio,
-                porcentaje_bloque_minimo=porcentaje_bloque_minimo,
-                hueco_entregas_dias=hueco_entregas_dias,
-                desfase_rescate_dias=desfase_rescate_dias,
-                cobertura_aviso=cobertura_aviso,
-            )
-        except Exception as error:
-            st.error('No se pudo guardar la nueva configuración.')
-            with st.expander('Detalles técnicos'):
-                st.exception(error)
-        else:
-            st.success(f"Configuración guardada. Recalculando {resultado['total_campanas']} campañas.")
-            st.session_state['id_lote_seleccionado'] = resultado['id_lote']
-            if st.button('Ver progreso del recálculo'):
-                st.switch_page('views/jobs.py')
+            valor = float(configuracion_vigente[parametro['clave']])
+            unidad = ' días' if 'dias' in parametro['clave'] else ('%' if 'porcentaje' in parametro['clave'] else '')
+            valor_texto = f'{valor * 100:.0f}%' if unidad == '%' else f'{valor:.0f}{unidad}'
+            st.metric(f"Valor base: {parametro['etiqueta']}", valor_texto)
 
 
-_mostrar_parametros_y_guardar(configuracion_vigente)
+_mostrar_metodologia(configuracion_vigente)

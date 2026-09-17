@@ -66,53 +66,26 @@ def test_metodologia_explica_cada_parametro_con_actividad_afectada(monkeypatch):
     assert 'No afecta ningún cálculo del ETL' in texto_completo
 
 
-def test_metodologia_fila_final_tiene_nombre_checkbox_y_boton_juntos(monkeypatch):
+def test_metodologia_muestra_metricas_base_y_sin_botones_destructivos(monkeypatch):
     _preparar(monkeypatch)
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
 
-    assert len(app_test.text_input) == 1
-    assert len(app_test.checkbox) == 1
-    boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
-    assert boton_guardar.disabled is True
+    assert len(app_test.exception) == 0
+    # No debe haber inputs de texto ni botones de guardar/recalcular
+    assert len(app_test.text_input) == 0
+    assert not any('Guardar y recalcular' in boton.label for boton in app_test.button)
+    # Debe haber métricas informativas con los valores base
+    assert len(app_test.metric) >= 6
 
 
-def test_metodologia_guarda_al_confirmar_checkbox_y_boton(monkeypatch):
-    _preparar(monkeypatch)
-    monkeypatch.setattr(
-        api_client,
-        'crear_configuracion',
-        lambda **kwargs: {'configuracion': {'id_configuracion': 2}, 'id_lote': 'lote-1', 'total_campanas': 19},
-    )
-    app_test = AppTest.from_file('views/metodologia.py')
-    app_test.run()
-    app_test.slider[0].set_value(0.05).run()
-    app_test.text_input[0].input('Prueba de nombre').run()
-    app_test.checkbox[0].check().run()
-    boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
-    boton_guardar.click().run()
-    assert len(app_test.success) == 1
-    assert app_test.session_state['id_lote_seleccionado'] == 'lote-1'
-
-
-def test_metodologia_boton_deshabilitado_sin_cambios_aunque_haya_nombre(monkeypatch):
+def test_metodologia_muestra_aviso_de_calibracion_en_vivo(monkeypatch):
     _preparar(monkeypatch)
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
-    app_test.text_input[0].input('Prueba de nombre').run()
-    app_test.checkbox[0].check().run()
-    boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
-    assert boton_guardar.disabled is True
 
-
-def test_metodologia_boton_deshabilitado_sin_nombre_aunque_haya_cambios(monkeypatch):
-    _preparar(monkeypatch)
-    app_test = AppTest.from_file('views/metodologia.py')
-    app_test.run()
-    app_test.slider[0].set_value(0.05).run()
-    app_test.checkbox[0].check().run()
-    boton_guardar = next(boton for boton in app_test.button if boton.label == 'Guardar y recalcular')
-    assert boton_guardar.disabled is True
+    mensajes_info = [elemento.value for elemento in app_test.info]
+    assert any('Calibración en vivo' in mensaje for mensaje in mensajes_info)
 
 
 def test_metodologia_muestra_error_si_falla_la_carga(monkeypatch):
@@ -123,3 +96,4 @@ def test_metodologia_muestra_error_si_falla_la_carga(monkeypatch):
     app_test = AppTest.from_file('views/metodologia.py')
     app_test.run()
     assert len(app_test.error) == 1
+
