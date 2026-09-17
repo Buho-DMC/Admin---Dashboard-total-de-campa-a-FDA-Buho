@@ -33,9 +33,9 @@ Diseñado como un cliente delgado (*thin client*): no contiene lógica de negoci
    python -m venv .venv
    .\.venv\Scripts\Activate.ps1  # En Windows PowerShell
    ```
-2. Instalar dependencias:
+2. Instalar dependencias (ubicadas en la raíz del monorepo):
    ```bash
-   pip install -r requirements.txt
+   pip install -r ../requirements.txt
    ```
 3. Configurar secretos locales:
    Copiar `.streamlit/secrets.toml.example` a `.streamlit/secrets.toml`:
