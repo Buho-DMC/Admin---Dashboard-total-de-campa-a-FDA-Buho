@@ -38,7 +38,10 @@ with st.form('formulario_alta_de_campana'):
     for columna, eventos_de_la_columna in zip(st.columns(2), eventos_por_columna):
         with columna:
             for evento in eventos_de_la_columna:
-                fechas_por_codigo_evento[evento['codigo']] = st.date_input(evento['nombre'], key=f"fecha_{evento['codigo']}")
+                codigo_evento = evento['codigo']
+                fechas_por_codigo_evento[codigo_evento] = st.date_input(
+                    evento['nombre'], key=f'fecha_{codigo_evento}'
+                )
 
     enviado = st.form_submit_button('Dar de alta')
 

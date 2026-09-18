@@ -137,7 +137,10 @@ def list_jobs_por_lote(engine: Engine, id_lote: str) -> list[dict]:
     """
     with engine.connect() as connection:
         result_rows = connection.execute(
-            text(f'SELECT {COLUMNAS_JOB} FROM dtdcfdab_job_ejecucion WHERE id_lote = :id_lote ORDER BY id_job_ejecucion'),
+            text(
+                f'SELECT {COLUMNAS_JOB} FROM dtdcfdab_job_ejecucion '
+                'WHERE id_lote = :id_lote ORDER BY id_job_ejecucion'
+            ),
             {'id_lote': id_lote},
         )
         return [dict(row._mapping) for row in result_rows]
@@ -340,14 +343,16 @@ def _upsert_snapshot(
     if connection.dialect.name == 'sqlite':
         actualizacion = ', '.join(f'{columna} = excluded.{columna}' for columna in columnas_a_actualizar)
         sentencia_upsert = (
-            f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
+            f'INSERT INTO dtdcfdab_campana_snapshot '
+            f'(id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
             f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en) '
             f'ON CONFLICT (id_campana, id_configuracion) DO UPDATE SET {actualizacion}'
         )
     else:
         actualizacion = ', '.join(f'{columna} = VALUES({columna})' for columna in columnas_a_actualizar)
         sentencia_upsert = (
-            f'INSERT INTO dtdcfdab_campana_snapshot (id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
+            f'INSERT INTO dtdcfdab_campana_snapshot '
+            f'(id_campana, id_configuracion, {columnas_del_resultado}, calculado_en) '
             f'VALUES (:id_campana, :id_configuracion, {placeholders_del_resultado}, :calculado_en) '
             f'ON DUPLICATE KEY UPDATE {actualizacion}'
         )
@@ -395,8 +400,9 @@ def ejecutar_job(engine: Engine, id_job_ejecucion: int, claw_client, retool_engi
         ).scalar_one()
         fila_configuracion = connection.execute(
             text(
-                'SELECT porcentaje_fin, porcentaje_inicio, porcentaje_bloque_minimo, hueco_entregas_dias, '
-                'desfase_rescate_dias, cobertura_aviso FROM dtdcfdab_configuracion WHERE id_configuracion = :id_configuracion'
+                'SELECT porcentaje_fin, porcentaje_inicio, porcentaje_bloque_minimo, '
+                'hueco_entregas_dias, desfase_rescate_dias, cobertura_aviso '
+                'FROM dtdcfdab_configuracion WHERE id_configuracion = :id_configuracion'
             ),
             {'id_configuracion': job_a_ejecutar['id_configuracion']},
         ).mappings().one()

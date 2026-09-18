@@ -35,14 +35,17 @@ def create_evento(engine: Engine, codigo: str, nombre: str, orden: int) -> dict:
     with engine.begin() as connection:
         insert_result = connection.execute(
             text(
-                "INSERT INTO dtdcfdab_evento (codigo, nombre, origen, rol, orden) "
-                "VALUES (:codigo, :nombre, 'manual', 'hito', :orden)"
+                'INSERT INTO dtdcfdab_evento (codigo, nombre, origen, rol, orden) '
+                'VALUES (:codigo, :nombre, \'manual\', \'hito\', :orden)'
             ),
             {'codigo': codigo, 'nombre': nombre, 'orden': orden},
         )
         nuevo_id_evento = insert_result.lastrowid
         inserted_row = connection.execute(
-            text('SELECT id_evento, codigo, nombre, origen, rol, orden FROM dtdcfdab_evento WHERE id_evento = :id_evento'),
+            text(
+                'SELECT id_evento, codigo, nombre, origen, rol, orden '
+                'FROM dtdcfdab_evento WHERE id_evento = :id_evento'
+            ),
             {'id_evento': nuevo_id_evento},
         ).mappings().one()
         return dict(inserted_row)

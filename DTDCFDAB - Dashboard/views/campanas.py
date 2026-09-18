@@ -96,7 +96,12 @@ def _obtener_ultimo_job_cacheado(id_campana: int) -> dict:
 
 
 @st.fragment
-def _mostrar_campana_seleccionada(ids_disponibles: list[int], snapshots_por_id: dict[int, dict], snapshots_vigentes: list[dict], nombres_por_id_campana: dict[int, str]) -> None:
+def _mostrar_campana_seleccionada(
+    ids_disponibles: list[int],
+    snapshots_por_id: dict[int, dict],
+    snapshots_vigentes: list[dict],
+    nombres_por_id_campana: dict[int, str],
+) -> None:
     """Selector, gráfica, análisis de fechas, hitos y acciones de la campaña elegida.
 
     Aislado en un fragment: cambiar de vista de gráfica, de tipo de análisis, o

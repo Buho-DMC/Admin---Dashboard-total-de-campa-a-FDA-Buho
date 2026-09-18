@@ -115,7 +115,13 @@ def dar_de_alta(
                 'INSERT INTO dtdcfdab_campana (id_claw, cliente, nombre, inicio_campana, fecha_alta) '
                 'VALUES (:id_claw, :cliente, :nombre, :inicio_campana, :fecha_alta)'
             ),
-            {'id_claw': id_claw, 'cliente': cliente, 'nombre': nombre, 'inicio_campana': inicio_campana, 'fecha_alta': ahora},
+            {
+                'id_claw': id_claw,
+                'cliente': cliente,
+                'nombre': nombre,
+                'inicio_campana': inicio_campana,
+                'fecha_alta': ahora,
+            },
         )
         id_campana = insert_result.lastrowid
 
@@ -133,7 +139,12 @@ def dar_de_alta(
                 },
             )
 
-    job_de_alta = jobs_service.crear_job(engine, id_campana=id_campana, id_configuracion=configuracion_vigente['id_configuracion'], tipo='alta')
+    job_de_alta = jobs_service.crear_job(
+        engine,
+        id_campana=id_campana,
+        id_configuracion=configuracion_vigente['id_configuracion'],
+        tipo='alta',
+    )
     campana_insertada = get_campana(engine, id_campana)
     return {'campana': campana_insertada, 'job': job_de_alta}
 

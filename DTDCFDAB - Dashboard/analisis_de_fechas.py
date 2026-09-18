@@ -102,8 +102,12 @@ def calcular_offset_por_etapa(snapshot: dict) -> dict[str, float | None]:
     for nombre_etapa, clave_inicio, clave_fin in charts.ETAPAS:
         inicio = _parsear_fecha(snapshot.get(clave_inicio))
         fin = _parsear_fecha(snapshot.get(clave_fin))
-        resultado[f'Inicio {nombre_etapa}'] = round((inicio - base).total_seconds() / 86400, 2) if base and inicio else None
-        resultado[f'Fin {nombre_etapa}'] = round((fin - base).total_seconds() / 86400, 2) if base and fin else None
+        resultado[f'Inicio {nombre_etapa}'] = (
+            round((inicio - base).total_seconds() / 86400, 2) if base and inicio else None
+        )
+        resultado[f'Fin {nombre_etapa}'] = (
+            round((fin - base).total_seconds() / 86400, 2) if base and fin else None
+        )
     return resultado
 
 

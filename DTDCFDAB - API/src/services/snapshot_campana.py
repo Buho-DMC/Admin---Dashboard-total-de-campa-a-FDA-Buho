@@ -86,7 +86,9 @@ def bloques_de_actividad(fechas: pd.Series, dias_de_hueco: int) -> tuple[pd.Seri
     return identificador_de_bloque, resumen_de_bloques
 
 
-def inicio_por_bloque(fechas: pd.Series, porcentaje_minimo: float, dias_de_hueco: int) -> tuple[pd.Timestamp, pd.DataFrame]:
+def inicio_por_bloque(
+    fechas: pd.Series, porcentaje_minimo: float, dias_de_hueco: int
+) -> tuple[pd.Timestamp, pd.DataFrame]:
     """Primer evento del primer bloque que pesa >= `porcentaje_minimo` del volumen total.
 
     Es el método que usa el cálculo de una etapa para fijar su fecha de
@@ -188,7 +190,9 @@ def regla_odps_validas(odps: pd.DataFrame, contexto: dict) -> tuple[pd.DataFrame
     sin_fin = odps['fin_produccion'].isna()
     odps_con_fechas = odps[~(sin_inicio | sin_fin)].copy()
 
-    duracion_minutos = (odps_con_fechas['fin_produccion'] - odps_con_fechas['inicio_produccion']).dt.total_seconds() / 60
+    duracion_minutos = (
+        odps_con_fechas['fin_produccion'] - odps_con_fechas['inicio_produccion']
+    ).dt.total_seconds() / 60
     es_instantanea = duracion_minutos < MINUTOS_MINIMOS_ODP
 
     sin_referencia_pick_pack = pd.isna(fin_pick_pack)
@@ -770,12 +774,18 @@ SELECT
     kc.id_claw,
     kp.campana,
     kp.folio::text AS folio,
-    TO_CHAR(kp.fecha_arte             AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_arte,
-    TO_CHAR(kp.fecha_preproyecto      AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_preproyecto,
-    TO_CHAR(kp.fecha_aprobacion_arte  AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_aprobacion_arte,
-    TO_CHAR(kp.fecha_aprobacion_odt   AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fecha_aprobacion_odt,
-    TO_CHAR(aop.fecha_inicio          AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS inicio_produccion,
-    TO_CHAR(aop.fecha_fin             AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS') AS fin_produccion
+    TO_CHAR(kp.fecha_arte             AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS')
+        AS fecha_arte,
+    TO_CHAR(kp.fecha_preproyecto      AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS')
+        AS fecha_preproyecto,
+    TO_CHAR(kp.fecha_aprobacion_arte  AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS')
+        AS fecha_aprobacion_arte,
+    TO_CHAR(kp.fecha_aprobacion_odt   AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS')
+        AS fecha_aprobacion_odt,
+    TO_CHAR(aop.fecha_inicio          AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS')
+        AS inicio_produccion,
+    TO_CHAR(aop.fecha_fin             AT TIME ZONE 'America/Monterrey', 'YYYY-MM-DD HH24:MI:SS')
+        AS fin_produccion
 FROM kam_preproyectos kp
 JOIN kam_campanas kc
     ON kc.nombre_nest = kp.campana

@@ -64,7 +64,9 @@ class CampanaEvento(Base):
 
     __tablename__ = 'dtdcfdab_campana_evento'
 
-    id_campana: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_campana.id_campana', ondelete='CASCADE'), primary_key=True)
+    id_campana: Mapped[int] = mapped_column(
+        ForeignKey('dtdcfdab_campana.id_campana', ondelete='CASCADE'), primary_key=True
+    )
     id_evento: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_evento.id_evento'), primary_key=True)
     fecha: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     actualizado_en: Mapped[datetime] = mapped_column(
@@ -108,7 +110,9 @@ class CampanaSnapshot(Base):
 
     __tablename__ = 'dtdcfdab_campana_snapshot'
 
-    id_campana: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_campana.id_campana', ondelete='CASCADE'), primary_key=True)
+    id_campana: Mapped[int] = mapped_column(
+        ForeignKey('dtdcfdab_campana.id_campana', ondelete='CASCADE'), primary_key=True
+    )
     id_configuracion: Mapped[int] = mapped_column(
         ForeignKey('dtdcfdab_configuracion.id_configuracion'), primary_key=True
     )
@@ -156,7 +160,9 @@ class JobEjecucion(Base):
     __tablename__ = 'dtdcfdab_job_ejecucion'
 
     id_job_ejecucion: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    id_campana: Mapped[int] = mapped_column(ForeignKey('dtdcfdab_campana.id_campana', ondelete='CASCADE'), nullable=False)
+    id_campana: Mapped[int] = mapped_column(
+        ForeignKey('dtdcfdab_campana.id_campana', ondelete='CASCADE'), nullable=False
+    )
     id_lote: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     id_configuracion: Mapped[int] = mapped_column(
         ForeignKey('dtdcfdab_configuracion.id_configuracion'), nullable=False

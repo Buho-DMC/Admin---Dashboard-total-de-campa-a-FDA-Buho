@@ -67,7 +67,10 @@ def list_snapshots_vigentes(engine: Engine) -> list[dict]:
         return []
     with engine.connect() as connection:
         result_rows = connection.execute(
-            text(f'SELECT {COLUMNAS_SNAPSHOT} FROM dtdcfdab_campana_snapshot WHERE id_configuracion = :id_configuracion'),
+            text(
+                f'SELECT {COLUMNAS_SNAPSHOT} FROM dtdcfdab_campana_snapshot '
+                'WHERE id_configuracion = :id_configuracion'
+            ),
             {'id_configuracion': configuracion_vigente['id_configuracion']},
         )
         return [_deserializar_snapshot(dict(row._mapping)) for row in result_rows]

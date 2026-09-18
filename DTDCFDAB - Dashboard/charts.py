@@ -248,5 +248,10 @@ def construir_grafica_de_percentiles_combinada(valores_percentil: dict[str, floa
         corte_z = _DISTRIBUCION_NORMAL_ESTANDAR.inv_cdf(valor_percentil)
         figura.add_vline(x=corte_z, line_dash='dash', annotation_text=f'{etiqueta} ({valor_percentil:.0%})')
 
-    figura.update_layout(title='Cortes de percentil', showlegend=True, xaxis_title='Valor ilustrativo', yaxis_title='Densidad')
+    figura.update_layout(
+        title='Cortes de percentil',
+        showlegend=True,
+        xaxis_title='Valor ilustrativo',
+        yaxis_title='Densidad',
+    )
     return figura
